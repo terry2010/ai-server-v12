@@ -5,6 +5,8 @@ const api = {
 
   getDockerStatus: () => ipcRenderer.invoke('docker:getStatus', {}),
 
+  startDockerDesktop: () => ipcRenderer.invoke('docker:startDesktop', {}),
+
   listModules: () => ipcRenderer.invoke('modules:list', {}),
 
   startModule: (moduleId) =>

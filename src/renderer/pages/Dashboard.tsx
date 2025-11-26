@@ -19,7 +19,7 @@ import { GlassCard } from '@/components/GlassCard'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusDot, type ServiceStatus } from '@/components/StatusDot'
-import type { ModuleId, ModuleInfo } from '../../shared/types'
+import type { DockerStatus, ModuleId, ModuleInfo } from '../../shared/types'
 
 export type ServiceKey = ModuleId
 
@@ -106,8 +106,12 @@ const heroSlides: HeroSlide[] = [
 
 export function DashboardPage() {
   const [services, setServices] = useState<ServiceModule[]>([])
-  const [dockerRunning, setDockerRunning] = useState(false)
+  const [dockerStatus, setDockerStatus] = useState<DockerStatus | null>(null)
+  const [isStartingDocker, setIsStartingDocker] = useState(false)
   const [activeHeroIndex, setActiveHeroIndex] = useState(0)
+
+  const dockerInstalled = dockerStatus?.installed ?? false
+  const dockerRunning = dockerStatus?.running ?? false
 
   const runningCount = useMemo(
     () => services.filter((s) => s.status === 'running').length,
@@ -121,10 +125,10 @@ export function DashboardPage() {
         window.api.listModules(),
       ])
 
-      setDockerRunning(dockerStatus.running)
+      setDockerStatus(dockerStatus)
       setServices(modules.map(mapModuleToService))
     } catch (_err) {
-      setDockerRunning(false)
+      setDockerStatus(null)
       setServices([])
     }
   }, [])
@@ -209,6 +213,82 @@ export function DashboardPage() {
           ),
         )
       }, 1500)
+    }
+  }
+
+  const handleStartAll = () => {
+    const toStart = services.filter(
+      (s) => s.status === 'stopped' || s.status === 'error',
+    )
+
+    toStart.forEach((service) => {
+      handleToggleService(service.key, service.status)
+    })
+  }
+
+  const handleDockerAction = async () => {
+    if (!dockerInstalled) {
+      window.open('https://www.docker.com/products/docker-desktop', '_blank')
+      return
+    }
+
+    if (dockerRunning || isStartingDocker) {
+      return
+    }
+
+    setIsStartingDocker(true)
+
+    try {
+      const result = await window.api.startDockerDesktop()
+      if (!result || !result.success) {
+        window.alert(result?.error ?? '无法启动 Docker 服务，请手动启动 Docker Desktop。')
+        setIsStartingDocker(false)
+        return
+      }
+
+      let errorCount = 0
+      const maxErrorCount = 20
+      const delayMs = 100
+      const startTime = Date.now()
+
+      const poll = async () => {
+        try {
+          const status = await window.api.getDockerStatus()
+          setDockerStatus(status)
+
+          if (!status.installed) {
+            setIsStartingDocker(false)
+            window.alert(status.error ?? '检测到本机未正确安装 Docker，请先安装 Docker Desktop。')
+            return
+          }
+
+          if (status.running) {
+            setIsStartingDocker(false)
+            return
+          }
+
+          const elapsed = Date.now() - startTime
+          if (elapsed >= 60_000) {
+            setIsStartingDocker(false)
+            window.alert(status.error ?? 'Docker 启动超时，请手动确认 Docker Desktop 状态。')
+            return
+          }
+        } catch (_err) {
+          errorCount += 1
+          if (errorCount >= maxErrorCount) {
+            setIsStartingDocker(false)
+            window.alert('检测 Docker 状态失败，请手动确认 Docker Desktop 是否已启动。')
+            return
+          }
+        }
+
+        window.setTimeout(poll, delayMs)
+      }
+
+      window.setTimeout(poll, delayMs)
+    } catch (_err) {
+      setIsStartingDocker(false)
+      window.alert('无法启动 Docker 服务，请手动启动 Docker Desktop。')
     }
   }
 
@@ -344,7 +424,11 @@ export function DashboardPage() {
                 <div className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 translate-x-2 whitespace-nowrap rounded-md bg-slate-900/90 px-2 py-1 text-[10px] text-slate-50 opacity-0 shadow-sm transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 dark:bg-slate-100 dark:text-slate-900">
                   {dockerRunning
                     ? 'Docker 当前运行中，可以管理和监控容器'
-                    : 'Docker 未运行，请先在本机启动 Docker Desktop'}
+                    : isStartingDocker && dockerInstalled
+                    ? 'Docker 正在启动中，请稍候…'
+                    : dockerInstalled
+                    ? 'Docker 未运行，可以点击右侧按钮尝试启动 Docker Desktop'
+                    : 'Docker 未安装，请先安装 Docker Desktop'}
                 </div>
               </div>
               <span>{dockerRunning ? '运行中' : '未运行'}</span>
@@ -373,9 +457,21 @@ export function DashboardPage() {
           <Button
             size="sm"
             shine
-            className="h-6 px-2 text-[10px] bg-gradient-to-r from-sky-500 to-sky-400 text-white shadow-lg shadow-sky-300/80 hover:shadow-xl hover:-translate-y-0.5"
+            className="h-6 px-2 text-[10px] bg-gradient-to-r from-sky-500 to-sky-400 text-white shadow-lg shadow-sky-300/80 hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed"
+            onClick={dockerRunning ? handleStartAll : handleDockerAction}
+            disabled={
+              dockerRunning
+                ? !services.some((s) => s.status === 'stopped' || s.status === 'error')
+                : isStartingDocker
+            }
           >
-            启动所有服务
+            {dockerRunning
+              ? '启动所有服务'
+              : dockerInstalled
+              ? isStartingDocker
+                ? 'Docker 启动中…'
+                : '启动 Docker 服务'
+              : '安装 Docker 服务'}
           </Button>
         </div>
       </GlassCard>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Filter, RefreshCcw, Trash2 } from 'lucide-react'
+import { Download, Filter, RefreshCcw, Trash2 } from 'lucide-react'
 import { GlassCard } from '@/components/GlassCard'
 import { Button } from '@/components/ui/button'
 import { StatusDot } from '@/components/StatusDot'
@@ -243,6 +243,9 @@ export function LogsPage() {
   const [pageSize, setPageSize] = useState(20)
   const [items, setItems] = useState<LogItem[]>([])
   const [total, setTotal] = useState(0)
+  const [exporting, setExporting] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     setPage(1)
@@ -252,6 +255,9 @@ export function LogsPage() {
     let cancelled = false
 
     const fetchLogs = async () => {
+      if (!cancelled) {
+        setLoading(true)
+      }
       try {
         const result = await window.api.getLogs({
           module: moduleFilter,
@@ -268,6 +274,10 @@ export function LogsPage() {
           setItems([])
           setTotal(0)
         }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
       }
     }
 
@@ -276,9 +286,26 @@ export function LogsPage() {
     return () => {
       cancelled = true
     }
-  }, [moduleFilter, levelFilter, page, pageSize])
+  }, [moduleFilter, levelFilter, page, pageSize, reloadKey])
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+  const handleExport = async () => {
+    if (exporting) return
+    setExporting(true)
+    try {
+      const result = await window.api.exportLogs({})
+      if (result && result.success) {
+        window.alert(`日志已导出到：${result.path}`)
+      } else {
+        window.alert('日志导出失败，请稍后重试。')
+      }
+    } catch (_err) {
+      window.alert('日志导出失败，请稍后重试。')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -339,8 +366,25 @@ export function LogsPage() {
               </SelectContent>
             </Select>
           </div>
-          <Button size="sm" variant="outline" shine className="text-[11px]">
-            <RefreshCcw className="mr-1 h-3 w-3" /> 刷新
+          <Button
+            size="sm"
+            variant="outline"
+            shine
+            className="text-[11px] disabled:opacity-60 disabled:cursor-not-allowed"
+            onClick={() => setReloadKey((key) => key + 1)}
+            disabled={loading}
+          >
+            <RefreshCcw className={`mr-1 h-3 w-3 ${loading ? 'animate-spin' : ''}`} /> 刷新
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            shine
+            className="text-[11px]"
+            onClick={handleExport}
+            disabled={exporting}
+          >
+            <Download className="mr-1 h-3 w-3" /> {exporting ? '导出中…' : '导出日志'}
           </Button>
           <Button size="sm" variant="destructive" shine className="text-[11px]">
             <Trash2 className="mr-1 h-3 w-3" /> 清空

@@ -12,6 +12,7 @@ export type EmptyPayload = Record<string, never>
 
 export interface IpcRequestMap {
   'docker:getStatus': EmptyPayload
+  'docker:startDesktop': EmptyPayload
   'modules:list': EmptyPayload
   'modules:start': { moduleId: ModuleId }
   'modules:stop': { moduleId: ModuleId }
@@ -32,6 +33,7 @@ export interface IpcRequestMap {
 
 export interface IpcResponseMap {
   'docker:getStatus': DockerStatus
+  'docker:startDesktop': { success: boolean; error?: string }
   'modules:list': ModuleInfo[]
   'modules:start': { success: boolean; error?: string }
   'modules:stop': { success: boolean; error?: string }

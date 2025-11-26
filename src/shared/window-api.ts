@@ -11,6 +11,7 @@ import type {
 export interface WindowApi {
   ping(): string
   getDockerStatus(): Promise<DockerStatus>
+  startDockerDesktop(): Promise<{ success: boolean; error?: string }>
   listModules(): Promise<ModuleInfo[]>
   startModule(moduleId: ModuleId): Promise<{ success: boolean; error?: string }>
   stopModule(moduleId: ModuleId): Promise<{ success: boolean; error?: string }>

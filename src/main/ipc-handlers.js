@@ -236,6 +236,14 @@ let modules = [
   },
 ]
 
+/** @type {Record<import('../shared/types').ModuleId, { containerNames: string[] }>} */
+const moduleDockerConfig = {
+  n8n: { containerNames: ['ai-server-n8n', 'n8n'] },
+  dify: { containerNames: ['ai-server-dify', 'dify'] },
+  oneapi: { containerNames: ['ai-server-oneapi', 'oneapi'] },
+  ragflow: { containerNames: ['ai-server-ragflow', 'ragflow'] },
+}
+
 /** @type {import('../shared/types').AppSettings} */
 const defaultAppSettings = {
   systemName: 'AI-Server 管理平台',
@@ -511,6 +519,78 @@ async function dockerFullCleanup() {
   return { success: true }
 }
 
+/**
+ * 使用 CLI 执行 docker pull，代理配置来源于 appSettings.docker.proxy
+ * @param {string} image
+ * @returns {Promise<import('../shared/types').DockerActionResult>}
+ */
+async function pullDockerImage(image) {
+  if (!image || typeof image !== 'string') {
+    return {
+      success: false,
+      error: '镜像名称不能为空。',
+    }
+  }
+
+  const status = await detectDockerStatus()
+  if (!status.installed || !status.running) {
+    return {
+      success: false,
+      error: status.error || 'Docker 未安装或未运行，无法拉取镜像。',
+    }
+  }
+
+  /** @type {NodeJS.ProcessEnv} */
+  const env = { ...process.env }
+
+  const proxy = appSettings?.docker?.proxy
+  const mode = proxy?.proxyMode ?? 'system'
+
+  if (mode === 'direct') {
+    delete env.HTTP_PROXY
+    delete env.HTTPS_PROXY
+  } else if (mode === 'manual') {
+    const host = proxy?.proxyHost
+    const port = proxy?.proxyPort
+    if (!host || !port) {
+      return {
+        success: false,
+        error: '已选择手动代理，但代理主机或端口未正确配置。',
+      }
+    }
+    const addr = `http://${host}:${port}`
+    env.HTTP_PROXY = addr
+    env.HTTPS_PROXY = addr
+  } else {
+    // system: 保持现有环境变量，不做修改
+  }
+
+  const cmd = `docker pull ${image}`
+
+  if (isVerboseLoggingEnabled()) {
+    console.log('[docker-pull] cmd:', cmd)
+    console.log('[docker-pull] HTTP_PROXY:', env.HTTP_PROXY || '(none)')
+    console.log('[docker-pull] HTTPS_PROXY:', env.HTTPS_PROXY || '(none)')
+  }
+
+  try {
+    const result = await execAsync(cmd, { env })
+
+    if (isVerboseLoggingEnabled()) {
+      if (result.stdout) {
+        console.log('[docker-pull] stdout:', String(result.stdout))
+      }
+      if (result.stderr) {
+        console.log('[docker-pull] stderr:', String(result.stderr))
+      }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return buildDockerActionError(`拉取镜像失败 (${image})`, error)
+  }
+}
+
 /** @type {import('../shared/types').LogItem[]} */
 const logs = [
   {
@@ -566,42 +646,168 @@ export function setupIpcHandlers() {
 
   // Modules
   ipcMain.handle('modules:list', async () => {
-    return modules
+    let containers = []
+    try {
+      const docker = getDockerClient()
+      containers = await docker.listContainers({ all: true })
+    } catch {
+      // Docker 不可用时，将所有模块视为已停止
+      return modules.map((m) => ({
+        ...m,
+        status: 'stopped',
+      }))
+    }
+
+    return modules.map((m) => {
+      const config = moduleDockerConfig[m.id]
+      if (!config) {
+        return {
+          ...m,
+          status: 'error',
+        }
+      }
+
+      const info =
+        containers.find((c) => {
+          if (!Array.isArray(c.Names)) return false
+          return c.Names.some((name) =>
+            config.containerNames.some(
+              (needle) => typeof name === 'string' && name.includes(needle),
+            ),
+          )
+        }) || null
+
+      if (!info) {
+        return {
+          ...m,
+          status: 'stopped',
+        }
+      }
+
+      const state = String(info.State || '').toLowerCase()
+      /** @type {import('../shared/types').ModuleStatus} */
+      let moduleStatus = 'stopped'
+      if (state === 'running') moduleStatus = 'running'
+      else if (state === 'restarting') moduleStatus = 'starting'
+      else if (state === 'dead') moduleStatus = 'error'
+      else moduleStatus = 'stopped'
+
+      let port = m.port
+      if (Array.isArray(info.Ports) && info.Ports.length > 0) {
+        const withPublic = info.Ports.find((p) => typeof p.PublicPort === 'number')
+        if (withPublic && typeof withPublic.PublicPort === 'number') {
+          port = withPublic.PublicPort
+        }
+      }
+
+      return {
+        ...m,
+        status: moduleStatus,
+        port,
+      }
+    })
   })
 
   ipcMain.handle('modules:start', async (_event, payload) => {
-    
-    const target = modules.find((m) => m.id === payload?.moduleId)
-    if (!target) return { success: false, error: '模块不存在' }
-
-    if (target.status === 'running' || target.status === 'starting') {
-      return { success: true }
+    const moduleId = payload?.moduleId
+    const config = moduleDockerConfig[moduleId]
+    if (!moduleId || !config) {
+      return { success: false, error: '模块不存在或未配置容器信息' }
     }
 
-    target.status = 'starting'
+    const dockerStatus = await detectDockerStatus()
+    if (!dockerStatus.installed || !dockerStatus.running) {
+      return {
+        success: false,
+        error: dockerStatus.error || 'Docker 未安装或未运行，无法启动模块。',
+      }
+    }
 
-    setTimeout(() => {
-      target.status = 'running'
-    }, 1500)
+    try {
+      const docker = getDockerClient()
+      const containers = await docker.listContainers({
+        all: true,
+        filters: {
+          name: config.containerNames,
+        },
+      })
 
-    return { success: true }
+      if (!containers || containers.length === 0) {
+        return {
+          success: false,
+          error: '未找到对应模块容器，请先通过 docker-compose 或其他方式创建容器。',
+        }
+      }
+
+      const info = containers[0]
+      const state = String(info.State || '').toLowerCase()
+      if (state === 'running') {
+        return { success: true }
+      }
+
+      const container = docker.getContainer(info.Id)
+      await container.start()
+
+      return { success: true }
+    } catch (error) {
+      const message =
+        (error && error.message) || (typeof error === 'string' ? error : '启动模块失败')
+      return {
+        success: false,
+        error: `启动模块失败：${message}`,
+      }
+    }
   })
 
   ipcMain.handle('modules:stop', async (_event, payload) => {
-    const target = modules.find((m) => m.id === payload?.moduleId)
-    if (!target) return { success: false, error: '模块不存在' }
-
-    if (target.status === 'stopped' || target.status === 'stopping') {
-      return { success: true }
+    const moduleId = payload?.moduleId
+    const config = moduleDockerConfig[moduleId]
+    if (!moduleId || !config) {
+      return { success: false, error: '模块不存在或未配置容器信息' }
     }
 
-    target.status = 'stopping'
+    const dockerStatus = await detectDockerStatus()
+    if (!dockerStatus.installed || !dockerStatus.running) {
+      return {
+        success: false,
+        error: dockerStatus.error || 'Docker 未安装或未运行，无法停止模块。',
+      }
+    }
 
-    setTimeout(() => {
-      target.status = 'stopped'
-    }, 1500)
+    try {
+      const docker = getDockerClient()
+      const containers = await docker.listContainers({
+        all: true,
+        filters: {
+          name: config.containerNames,
+        },
+      })
 
-    return { success: true }
+      if (!containers || containers.length === 0) {
+        return {
+          success: false,
+          error: '未找到对应模块容器，请确认容器是否已经创建。',
+        }
+      }
+
+      const info = containers[0]
+      const state = String(info.State || '').toLowerCase()
+      if (state !== 'running') {
+        return { success: true }
+      }
+
+      const container = docker.getContainer(info.Id)
+      await container.stop()
+
+      return { success: true }
+    } catch (error) {
+      const message =
+        (error && error.message) || (typeof error === 'string' ? error : '停止模块失败')
+      return {
+        success: false,
+        error: `停止模块失败：${message}`,
+      }
+    }
   })
 
   // Logs
@@ -645,6 +851,10 @@ export function setupIpcHandlers() {
 
   ipcMain.handle('debug:dockerFullCleanup', async () => {
     return dockerFullCleanup()
+  })
+
+  ipcMain.handle('docker:pullImage', async (_event, payload) => {
+    return pullDockerImage(payload?.image)
   })
 
   // Settings

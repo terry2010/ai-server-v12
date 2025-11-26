@@ -387,6 +387,19 @@ function NetworkSettings({ settings, loading, saving, onChange, onSave }: Networ
     updateProxy({ proxyPort: Number.isFinite(num) && num > 0 ? num : null })
   }
 
+  const handleTestConnection = async () => {
+    try {
+      const result = await window.api.pullDockerImage('hello-world:latest')
+      if (!result || !result.success) {
+        window.alert(result?.error ?? '测试连接失败，请检查 Docker 与代理配置。')
+      } else {
+        window.alert('测试连接成功，可以通过当前代理正常拉取镜像。')
+      }
+    } catch (_err) {
+      window.alert('测试连接失败，请检查 Docker 与代理配置。')
+    }
+  }
+
   return (
     <Card className="border-none bg-transparent shadow-none">
       <CardHeader className="px-0">
@@ -449,7 +462,7 @@ function NetworkSettings({ settings, loading, saving, onChange, onSave }: Networ
           <Button shine disabled={loading || saving} onClick={onSave}>
             保存网络设置
           </Button>
-          <Button variant="outline" disabled>
+          <Button variant="outline" onClick={handleTestConnection}>
             测试连接
           </Button>
         </div>

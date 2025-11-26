@@ -7,6 +7,11 @@ const api = {
 
   startDockerDesktop: () => ipcRenderer.invoke('docker:startDesktop', {}),
 
+  pullDockerImage: (image) =>
+    ipcRenderer.invoke('docker:pullImage', {
+      image,
+    }),
+
   dockerStopAll: () => ipcRenderer.invoke('debug:dockerStopAll', {}),
 
   dockerRemoveAll: () => ipcRenderer.invoke('debug:dockerRemoveAll', {}),

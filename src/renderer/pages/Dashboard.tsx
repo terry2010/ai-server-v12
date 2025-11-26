@@ -160,10 +160,23 @@ export function DashboardPage() {
 
       window.api
         .stopModule(key)
+        .then((result) => {
+          if (!result || !result.success) {
+            setServices((prev) =>
+              prev.map((s) => (s.key === key ? { ...s, status: 'error' } : s)),
+            )
+            if (result?.error) {
+              window.alert(result.error)
+            } else {
+              window.alert('停止模块失败，请检查 Docker 状态。')
+            }
+          }
+        })
         .catch(() => {
           setServices((prev) =>
             prev.map((s) => (s.key === key ? { ...s, status: 'error' } : s)),
           )
+          window.alert('停止模块失败，请检查 Docker 状态。')
         })
 
       window.setTimeout(() => {
@@ -194,10 +207,23 @@ export function DashboardPage() {
 
       window.api
         .startModule(key)
+        .then((result) => {
+          if (!result || !result.success) {
+            setServices((prev) =>
+              prev.map((s) => (s.key === key ? { ...s, status: 'error' } : s)),
+            )
+            if (result?.error) {
+              window.alert(result.error)
+            } else {
+              window.alert('启动模块失败，请检查 Docker 状态。')
+            }
+          }
+        })
         .catch(() => {
           setServices((prev) =>
             prev.map((s) => (s.key === key ? { ...s, status: 'error' } : s)),
           )
+          window.alert('启动模块失败，请检查 Docker 状态。')
         })
 
       window.setTimeout(() => {

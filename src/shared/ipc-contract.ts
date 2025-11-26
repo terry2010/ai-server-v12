@@ -6,6 +6,7 @@ import type {
   LogModule,
   ModuleId,
   ModuleInfo,
+  DockerActionResult,
 } from './types'
 
 export type EmptyPayload = Record<string, never>
@@ -29,6 +30,10 @@ export interface IpcRequestMap {
   }
   'settings:get': EmptyPayload
   'settings:update': Partial<AppSettings>
+  'debug:dockerStopAll': EmptyPayload
+  'debug:dockerRemoveAll': EmptyPayload
+  'debug:dockerPruneVolumes': EmptyPayload
+  'debug:dockerFullCleanup': EmptyPayload
 }
 
 export interface IpcResponseMap {
@@ -41,6 +46,10 @@ export interface IpcResponseMap {
   'logs:export': { success: boolean; path?: string; error?: string }
   'settings:get': AppSettings
   'settings:update': AppSettings
+  'debug:dockerStopAll': DockerActionResult
+  'debug:dockerRemoveAll': DockerActionResult
+  'debug:dockerPruneVolumes': DockerActionResult
+  'debug:dockerFullCleanup': DockerActionResult
 }
 
 export type IpcChannels = keyof IpcRequestMap

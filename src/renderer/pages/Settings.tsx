@@ -83,6 +83,44 @@ export function SettingsPage() {
     setDangerOpen(true)
   }
 
+  const handleConfirmDanger = async () => {
+    if (!dangerAction) {
+      setDangerOpen(false)
+      return
+    }
+
+    try {
+      let result: { success: boolean; error?: string; exitCode?: number; stderrSnippet?: string } | null = null
+      let successMessage = '操作已完成。'
+
+      if (dangerAction === '停止所有容器') {
+        result = await window.api.dockerStopAll()
+        successMessage = '所有容器已停止。'
+      } else if (dangerAction === '删除所有容器') {
+        result = await window.api.dockerRemoveAll()
+        successMessage = '所有容器已删除。'
+      } else if (dangerAction === '清空所有数据卷') {
+        result = await window.api.dockerPruneVolumes()
+        successMessage = '所有数据卷已清空。'
+      } else if (dangerAction === '一键清理') {
+        result = await window.api.dockerFullCleanup()
+        successMessage = '一键清理已完成。'
+      }
+
+      if (!result) {
+        window.alert('未知的调试操作。')
+      } else if (!result.success) {
+        window.alert(result.error ?? '执行调试操作失败，请检查 Docker 状态。')
+      } else {
+        window.alert(successMessage)
+      }
+    } catch (_err) {
+      window.alert('执行调试操作失败，请检查 Docker 状态。')
+    } finally {
+      setDangerOpen(false)
+    }
+  }
+
   return (
     <GlassCard className="grid gap-4 rounded-2xl p-4 md:grid-cols-[220px_minmax(0,1fr)] md:p-6">
       <div className="space-y-3 border-b border-white/15 pb-3 md:border-b-0 md:border-r md:pb-0 md:pr-4">
@@ -148,6 +186,11 @@ export function SettingsPage() {
         )}
         {activeTab === 'debug' && (
           <DebugSettings
+            settings={settings}
+            loading={loading}
+            saving={saving}
+            onChange={handleLocalChange}
+            onSave={handleSave}
             onDangerClick={openDanger}
           />
         )}
@@ -171,7 +214,7 @@ export function SettingsPage() {
             <Button
               variant="destructive"
               shine
-              onClick={() => setDangerOpen(false)}
+              onClick={handleConfirmDanger}
             >
               确认执行
             </Button>
@@ -461,10 +504,46 @@ function ModuleSettings({ moduleKey }: ModuleSettingsProps) {
 }
 
 interface DebugSettingsProps {
+  settings: AppSettings | null
+  loading: boolean
+  saving: boolean
+  onChange: (next: AppSettings) => void
+  onSave: () => void
   onDangerClick: (action: string) => void
 }
 
-function DebugSettings({ onDangerClick }: DebugSettingsProps) {
+function DebugSettings({ settings, loading, saving, onChange, onSave, onDangerClick }: DebugSettingsProps) {
+  if (loading || !settings) {
+    return (
+      <Card className="border-none bg-transparent shadow-none">
+        <CardHeader className="px-0">
+          <CardTitle>调试设置</CardTitle>
+          <CardDescription>正在加载配置…</CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
+
+  const handleShowDebugToolsChange = (checked: boolean) => {
+    onChange({
+      ...settings,
+      debug: {
+        ...settings.debug,
+        showDebugTools: checked,
+      },
+    })
+  }
+
+  const handleVerboseLoggingChange = (checked: boolean) => {
+    onChange({
+      ...settings,
+      debug: {
+        ...settings.debug,
+        verboseLogging: checked,
+      },
+    })
+  }
+
   return (
     <Card className="border-none bg-transparent shadow-none">
       <CardHeader className="px-0">
@@ -474,10 +553,13 @@ function DebugSettings({ onDangerClick }: DebugSettingsProps) {
       <CardContent className="space-y-4 px-0">
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="显示调试工具" description="在界面中展示额外的调试入口。">
-            <Switch />
+            <Switch checked={settings.debug.showDebugTools} onCheckedChange={handleShowDebugToolsChange} />
           </Field>
           <Field label="输出详细日志" description="开启后将输出更多 debug 日志。">
-            <Switch />
+            <Switch
+              checked={settings.debug.verboseLogging}
+              onCheckedChange={handleVerboseLoggingChange}
+            />
           </Field>
         </div>
 
@@ -527,6 +609,15 @@ function DebugSettings({ onDangerClick }: DebugSettingsProps) {
               一键清理
             </Button>
           </div>
+        </div>
+
+        <div className="flex gap-2 pt-2">
+          <Button shine disabled={loading || saving} onClick={onSave}>
+            保存调试设置
+          </Button>
+          <Button variant="outline" disabled>
+            重置为默认
+          </Button>
         </div>
       </CardContent>
     </Card>

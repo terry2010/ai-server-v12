@@ -3,55 +3,113 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { exec } from 'node:child_process'
 import { promisify } from 'node:util'
+import Docker from 'dockerode'
 
 // --- Docker status (real detection) + mock data for Phase 3 (modules & logs) ---
 
 const execAsync = promisify(exec)
+
+let dockerClient = null
+
+function getDockerClient() {
+  if (!dockerClient) {
+    if (process.platform === 'win32') {
+      dockerClient = new Docker({
+        socketPath: '//./pipe/docker_engine',
+      })
+    } else {
+      dockerClient = new Docker({
+        socketPath: '/var/run/docker.sock',
+      })
+    }
+  }
+  return dockerClient
+}
 
 /**
  * @returns {Promise<import('../shared/types').DockerStatus>}
  */
 async function detectDockerStatus() {
   try {
-    const { stdout } = await execAsync('docker version --format "{{.Server.Version}}"')
-    const raw = (stdout || '').toString().trim()
-    const cleaned = raw.replace(/^"|"$/g, '')
+    const docker = getDockerClient()
+    const versionInfo = await docker.version()
+
+    const version =
+      (versionInfo && (versionInfo.Version || versionInfo.version)) || undefined
 
     return {
       installed: true,
       running: true,
-      version: cleaned || undefined,
+      version,
       platform: process.platform,
     }
   } catch (error) {
-    const message = String(error && error.message ? error.message : '')
-    const stderr = String(error && error.stderr ? error.stderr : '')
-    const combined = (message + ' ' + stderr).toLowerCase()
-
-    if (combined.includes('not found') || combined.includes('is not recognized')) {
+    // dockerode 无法连接到 Docker 引擎时的处理
+    if (process.platform !== 'win32') {
       return {
         installed: false,
         running: false,
-        error: 'Docker CLI 未安装或未在 PATH 中。',
+        error: '未检测到 Docker 守护进程，请确认已在本机安装并运行 Docker。',
         platform: process.platform,
       }
     }
 
     let dockerDesktopProcessRunning = false
+    let dockerDesktopInstalled = false
 
-    if (process.platform === 'win32') {
+    // Windows: 检查 Docker Desktop 进程是否存在（判断是否正在启动中）
+    try {
+      const { stdout: taskListOut } = await execAsync(
+        'tasklist /FI "IMAGENAME eq Docker Desktop.exe" /FI "IMAGENAME eq com.docker.backend.exe" /FO CSV /NH',
+        { shell: 'cmd.exe' },
+      )
+      const out = (taskListOut || '').toString().trim()
+
+      if (out && !out.toLowerCase().startsWith('info: no tasks')) {
+        dockerDesktopProcessRunning = true
+      }
+    } catch {
+      dockerDesktopProcessRunning = false
+    }
+
+    // Windows: 通过快捷方式 / 默认安装路径判断是否安装了 Docker Desktop
+    const programData = process.env.ProgramData || 'C:\\ProgramData'
+    const appData = process.env.APPDATA
+
+    /** @type {string[]} */
+    const candidates = []
+
+    candidates.push(
+      path.join(programData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Docker', 'Docker Desktop.lnk'),
+    )
+    if (appData) {
+      candidates.push(
+        path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Docker Desktop.lnk'),
+      )
+      candidates.push(
+        path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Docker', 'Docker Desktop.lnk'),
+      )
+    }
+
+    candidates.push(
+      'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe',
+      'C:\\Program Files (x86)\\Docker\\Docker\\Docker Desktop.exe',
+    )
+
+    dockerDesktopInstalled = candidates.some((p) => {
       try {
-        const { stdout: taskListOut } = await execAsync(
-          'tasklist /FI "IMAGENAME eq Docker Desktop.exe" /FI "IMAGENAME eq com.docker.backend.exe" /FO CSV /NH',
-          { shell: 'cmd.exe' },
-        )
-        const out = (taskListOut || '').toString().trim()
-
-        if (out && !out.toLowerCase().startsWith('info: no tasks')) {
-          dockerDesktopProcessRunning = true
-        }
+        return fs.existsSync(p)
       } catch {
-        dockerDesktopProcessRunning = false
+        return false
+      }
+    })
+
+    if (!dockerDesktopInstalled) {
+      return {
+        installed: false,
+        running: false,
+        error: '未检测到 Docker Desktop 安装，请先安装 Docker Desktop。',
+        platform: process.platform,
       }
     }
 
@@ -187,7 +245,7 @@ const defaultAppSettings = {
   docker: {
     mirrorUrls: ['https://registry.docker-cn.com'],
     proxy: {
-      proxyMode: 'direct',
+      proxyMode: 'system',
       proxyHost: '',
       proxyPort: null,
     },
@@ -217,6 +275,10 @@ const defaultAppSettings = {
       databaseUrl: '',
       env: {},
     },
+  },
+  debug: {
+    showDebugTools: false,
+    verboseLogging: false,
   },
 }
 
@@ -262,11 +324,191 @@ function mergeAppSettings(base, patch) {
       ...base.docker,
       ...(patch?.docker ?? {}),
     },
+    debug: {
+      ...base.debug,
+      ...(patch?.debug ?? {}),
+    },
     modules: {
       ...base.modules,
       ...(patch?.modules ?? {}),
     },
   }
+}
+
+function isVerboseLoggingEnabled() {
+  return !!(appSettings && appSettings.debug && appSettings.debug.verboseLogging)
+}
+
+async function ensureDockerAvailableForDebug() {
+  const status = await detectDockerStatus()
+  if (!status.installed || !status.running) {
+    return {
+      ok: false,
+      errorResult: {
+        success: false,
+        error: status.error || 'Docker 未安装或未运行，无法执行调试操作。',
+      },
+    }
+  }
+
+  return { ok: true }
+}
+
+async function execDockerCommand(command) {
+  if (isVerboseLoggingEnabled()) {
+    console.log('[debug-docker] exec:', command)
+  }
+
+  const result = await execAsync(command)
+
+  if (isVerboseLoggingEnabled()) {
+    if (result.stdout) {
+      console.log('[debug-docker] stdout:', String(result.stdout))
+    }
+    if (result.stderr) {
+      console.log('[debug-docker] stderr:', String(result.stderr))
+    }
+  }
+
+  return result
+}
+
+function buildDockerActionError(defaultMessage, error) {
+  const anyErr = error
+  let exitCode
+
+  if (anyErr && typeof anyErr.code === 'number') {
+    exitCode = anyErr.code
+  }
+
+  let stderrText = ''
+  if (anyErr && typeof anyErr.stderr === 'string') {
+    stderrText = anyErr.stderr
+  } else if (anyErr && typeof anyErr.message === 'string') {
+    stderrText = anyErr.message
+  }
+
+  const snippet = stderrText
+    .split(/\r?\n/)
+    .slice(0, 5)
+    .join('\n')
+    .trim()
+
+  const message = snippet ? `${defaultMessage}：${snippet}` : defaultMessage
+
+  return {
+    success: false,
+    error: message,
+    exitCode,
+    stderrSnippet: snippet || undefined,
+  }
+}
+
+async function dockerStopAllContainers() {
+  const check = await ensureDockerAvailableForDebug()
+  if (!check.ok) {
+    return check.errorResult
+  }
+
+  try {
+    const docker = getDockerClient()
+    const containers = await docker.listContainers({ all: true })
+
+    if (!containers || containers.length === 0) {
+      return { success: true }
+    }
+
+    await Promise.all(
+      containers.map((info) =>
+        docker
+          .getContainer(info.Id)
+          .stop()
+          .catch(() => undefined),
+      ),
+    )
+
+    return { success: true }
+  } catch (error) {
+    return buildDockerActionError('停止所有容器失败', error)
+  }
+}
+
+async function dockerRemoveAllContainers() {
+  const check = await ensureDockerAvailableForDebug()
+  if (!check.ok) {
+    return check.errorResult
+  }
+
+  try {
+    const docker = getDockerClient()
+    const containers = await docker.listContainers({ all: true })
+
+    if (!containers || containers.length === 0) {
+      return { success: true }
+    }
+
+    await Promise.all(
+      containers.map((info) =>
+        docker
+          .getContainer(info.Id)
+          .remove({ force: true })
+          .catch(() => undefined),
+      ),
+    )
+
+    return { success: true }
+  } catch (error) {
+    return buildDockerActionError('删除所有容器失败', error)
+  }
+}
+
+async function dockerPruneVolumes() {
+  const check = await ensureDockerAvailableForDebug()
+  if (!check.ok) {
+    return check.errorResult
+  }
+
+  try {
+    const docker = getDockerClient()
+    await docker.pruneVolumes()
+    return { success: true }
+  } catch (error) {
+    return buildDockerActionError('清空所有数据卷失败', error)
+  }
+}
+
+async function dockerFullCleanup() {
+  const stopResult = await dockerStopAllContainers()
+  if (!stopResult.success) {
+    return {
+      success: false,
+      error: stopResult.error,
+      exitCode: stopResult.exitCode,
+      stderrSnippet: stopResult.stderrSnippet,
+    }
+  }
+
+  const removeResult = await dockerRemoveAllContainers()
+  if (!removeResult.success) {
+    return {
+      success: false,
+      error: removeResult.error,
+      exitCode: removeResult.exitCode,
+      stderrSnippet: removeResult.stderrSnippet,
+    }
+  }
+
+  const pruneResult = await dockerPruneVolumes()
+  if (!pruneResult.success) {
+    return {
+      success: false,
+      error: pruneResult.error,
+      exitCode: pruneResult.exitCode,
+      stderrSnippet: pruneResult.stderrSnippet,
+    }
+  }
+
+  return { success: true }
 }
 
 /** @type {import('../shared/types').LogItem[]} */
@@ -387,6 +629,22 @@ export function setupIpcHandlers() {
   ipcMain.handle('logs:export', async () => {
     // 暂时不做真实导出，返回 mock 结果
     return { success: true, path: 'mock-logs.log' }
+  })
+
+  ipcMain.handle('debug:dockerStopAll', async () => {
+    return dockerStopAllContainers()
+  })
+
+  ipcMain.handle('debug:dockerRemoveAll', async () => {
+    return dockerRemoveAllContainers()
+  })
+
+  ipcMain.handle('debug:dockerPruneVolumes', async () => {
+    return dockerPruneVolumes()
+  })
+
+  ipcMain.handle('debug:dockerFullCleanup', async () => {
+    return dockerFullCleanup()
   })
 
   // Settings

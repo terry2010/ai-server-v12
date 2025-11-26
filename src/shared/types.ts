@@ -52,6 +52,18 @@ export interface DockerSettings {
   proxy: DockerProxySettings
 }
 
+export interface DebugSettings {
+  showDebugTools: boolean
+  verboseLogging: boolean
+}
+
+export interface DockerActionResult {
+  success: boolean
+  error?: string
+  exitCode?: number
+  stderrSnippet?: string
+}
+
 export interface ModuleSettings {
   enabled: boolean
   port: number
@@ -65,5 +77,6 @@ export interface AppSettings {
   logLevel: LogLevel
   autoStartOnBoot: boolean
   docker: DockerSettings
+  debug: DebugSettings
   modules: Record<ModuleId, ModuleSettings>
 }

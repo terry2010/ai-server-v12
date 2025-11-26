@@ -7,6 +7,14 @@ const api = {
 
   startDockerDesktop: () => ipcRenderer.invoke('docker:startDesktop', {}),
 
+  dockerStopAll: () => ipcRenderer.invoke('debug:dockerStopAll', {}),
+
+  dockerRemoveAll: () => ipcRenderer.invoke('debug:dockerRemoveAll', {}),
+
+  dockerPruneVolumes: () => ipcRenderer.invoke('debug:dockerPruneVolumes', {}),
+
+  dockerFullCleanup: () => ipcRenderer.invoke('debug:dockerFullCleanup', {}),
+
   listModules: () => ipcRenderer.invoke('modules:list', {}),
 
   startModule: (moduleId) =>

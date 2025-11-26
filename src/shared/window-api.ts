@@ -6,6 +6,7 @@ import type {
   LogModule,
   ModuleId,
   ModuleInfo,
+  DockerActionResult,
 } from './types'
 
 export interface WindowApi {
@@ -28,4 +29,8 @@ export interface WindowApi {
   }): Promise<{ success: boolean; path?: string; error?: string }>
   getSettings(): Promise<AppSettings>
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>
+  dockerStopAll(): Promise<DockerActionResult>
+  dockerRemoveAll(): Promise<DockerActionResult>
+  dockerPruneVolumes(): Promise<DockerActionResult>
+  dockerFullCleanup(): Promise<DockerActionResult>
 }

@@ -55,6 +55,7 @@ export interface DockerSettings {
 export interface DebugSettings {
   showDebugTools: boolean
   verboseLogging: boolean
+  showSystemNameSetting: boolean
 }
 
 export interface DockerActionResult {

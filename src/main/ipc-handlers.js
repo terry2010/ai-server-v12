@@ -269,6 +269,86 @@ const moduleBaseServiceContainers = {
   oneapi: [MYSQL_DB_CONTAINER_NAME, REDIS_CONTAINER_NAME],
 }
 
+async function maybeStopBaseServicesForModule(moduleId, docker) {
+  const baseContainers = moduleBaseServiceContainers[moduleId]
+  if (!baseContainers || baseContainers.length === 0) {
+    return
+  }
+
+  for (const baseName of baseContainers) {
+    let inUseByOthers = false
+
+    for (const [otherModuleId, otherBaseContainers] of Object.entries(
+      moduleBaseServiceContainers,
+    )) {
+      if (otherModuleId === moduleId) continue
+      if (!Array.isArray(otherBaseContainers) || !otherBaseContainers.includes(baseName)) continue
+
+      const otherConfig = moduleDockerConfig[otherModuleId]
+      if (!otherConfig) continue
+
+      let containers = []
+      try {
+        containers = await docker.listContainers({
+          all: true,
+          filters: {
+            name: otherConfig.containerNames,
+          },
+        })
+      } catch {
+        // ignore
+      }
+
+      const hasRunning =
+        Array.isArray(containers) &&
+        containers.some((info) => {
+          const state = String(info.State || '').toLowerCase()
+          return state === 'running' || state === 'restarting'
+        })
+
+      if (hasRunning) {
+        inUseByOthers = true
+        break
+      }
+    }
+
+    if (inUseByOthers) {
+      continue
+    }
+
+    try {
+      const baseContainersList = await docker.listContainers({
+        all: true,
+        filters: {
+          name: [baseName],
+        },
+      })
+
+      if (!Array.isArray(baseContainersList) || baseContainersList.length === 0) {
+        continue
+      }
+
+      for (const info of baseContainersList) {
+        const state = String(info.State || '').toLowerCase()
+        if (state === 'running' || state === 'restarting') {
+          const container = docker.getContainer(info.Id)
+          try {
+            await container.stop()
+          } catch (error) {
+            if (isVerboseLoggingEnabled()) {
+              console.error('[modules] 停止基础服务容器失败', { moduleId, baseName, error })
+            }
+          }
+        }
+      }
+    } catch (error) {
+      if (isVerboseLoggingEnabled()) {
+        console.error('[modules] 检查基础服务容器状态失败', { moduleId, baseName, error })
+      }
+    }
+  }
+}
+
 /** @type {import('../shared/types').AppSettings} */
 const defaultAppSettings = {
   systemName: 'AI-Server 管理平台',
@@ -312,6 +392,7 @@ const defaultAppSettings = {
   debug: {
     showDebugTools: false,
     verboseLogging: false,
+    showSystemNameSetting: true,
   },
 }
 
@@ -434,6 +515,44 @@ function getMirrorPrefixesFromSettings() {
   }
 
   return Array.from(new Set(result))
+}
+
+function ensureN8nSecretsInSettings() {
+  try {
+    if (!appSettings || !appSettings.modules || !appSettings.modules.n8n) return
+
+    const moduleSettings = appSettings.modules.n8n
+    const currentEnv = moduleSettings.env || {}
+    const nextEnv = { ...currentEnv }
+    let changed = false
+
+    const ensureSecret = (key, length) => {
+      const value = nextEnv[key]
+      if (!value || typeof value !== 'string' || !value.trim()) {
+        nextEnv[key] = generateRandomPassword(length)
+        changed = true
+      }
+    }
+
+    ensureSecret('N8N_ENCRYPTION_KEY', 48)
+    ensureSecret('N8N_JWT_SECRET', 48)
+    ensureSecret('N8N_USER_MANAGEMENT_JWT_SECRET', 48)
+
+    if (!changed) return
+
+    appSettings = {
+      ...appSettings,
+      modules: {
+        ...appSettings.modules,
+        n8n: {
+          ...moduleSettings,
+          env: nextEnv,
+        },
+      },
+    }
+
+    saveSettingsToDisk(appSettings)
+  } catch {}
 }
 
 function splitImageName(image) {
@@ -1151,6 +1270,8 @@ async function ensureN8nRuntime() {
   if (isVerboseLoggingEnabled()) {
     console.log('[n8n] ensureN8nRuntime: start')
   }
+
+  ensureN8nSecretsInSettings()
 
   const dbResult = await ensureN8nPostgres()
   if (!dbResult || !dbResult.success) {
@@ -2248,6 +2369,22 @@ export function setupIpcHandlers() {
 
   // Modules
   ipcMain.handle('modules:list', async () => {
+    const getModuleEnabled = (moduleInfo) => {
+      try {
+        if (
+          appSettings &&
+          appSettings.modules &&
+          appSettings.modules[moduleInfo.id] &&
+          typeof appSettings.modules[moduleInfo.id].enabled === 'boolean'
+        ) {
+          return appSettings.modules[moduleInfo.id].enabled
+        }
+      } catch {
+        // ignore
+      }
+      return moduleInfo.enabled
+    }
+
     let containers = []
     try {
       const docker = getDockerClient()
@@ -2256,6 +2393,7 @@ export function setupIpcHandlers() {
       // Docker 不可用时，将所有模块视为已停止
       return modules.map((m) => ({
         ...m,
+        enabled: getModuleEnabled(m),
         status: 'stopped',
       }))
     }
@@ -2304,6 +2442,7 @@ export function setupIpcHandlers() {
 
       return {
         ...m,
+        enabled: getModuleEnabled(m),
         status: moduleStatus,
         port,
       }
@@ -2442,6 +2581,53 @@ export function setupIpcHandlers() {
         error: `停止模块失败：${message}`,
       }
     }
+  })
+
+  ipcMain.handle('n8n:restart', async () => {
+    const dockerStatus = await detectDockerStatus()
+    if (!dockerStatus.installed || !dockerStatus.running) {
+      return {
+        success: false,
+        error: dockerStatus.error || 'Docker 未安装或未运行，无法重启 n8n 模块。',
+      }
+    }
+
+    try {
+      const docker = getDockerClient()
+      const config = moduleDockerConfig.n8n
+      const containers = await docker.listContainers({
+        all: true,
+        filters: {
+          name: config.containerNames,
+        },
+      })
+
+      for (const info of containers) {
+        const container = docker.getContainer(info.Id)
+        const state = String(info.State || '').toLowerCase()
+        if (state === 'running' || state === 'restarting') {
+          await container.stop()
+        }
+        await container.remove({ force: true })
+      }
+    } catch (error) {
+      const message =
+        (error && error.message) || (typeof error === 'string' ? error : '重启前清理旧 n8n 容器失败')
+      return {
+        success: false,
+        error: `重启前清理旧 n8n 容器失败：${message}`,
+      }
+    }
+
+    const runtimeResult = await ensureN8nRuntime()
+    if (!runtimeResult || !runtimeResult.success) {
+      return {
+        success: false,
+        error: (runtimeResult && runtimeResult.error) || '重启 n8n 运行环境失败。',
+      }
+    }
+
+    return { success: true }
   })
 
   // Logs

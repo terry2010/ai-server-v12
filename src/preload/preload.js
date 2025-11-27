@@ -32,6 +32,9 @@ const api = {
       moduleId,
     }),
 
+  restartN8n: () =>
+    ipcRenderer.invoke('n8n:restart', {}),
+
   getLogs: (params = {}) =>
     ipcRenderer.invoke('logs:list', {
       module: params.module ?? 'all',

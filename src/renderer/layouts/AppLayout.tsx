@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, BookOpenText, Store, Settings2, Activity, TerminalSquare, Sun, Moon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -27,9 +27,54 @@ export function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
   const [theme, setTheme] = useTheme()
+  const [systemName, setSystemName] = useState('AI-Server')
+  const [n8nEnabled, setN8nEnabled] = useState(true)
   const navigate = useNavigate()
 
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark')
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadSettings = async () => {
+      try {
+        const current = await window.api.getSettings()
+        if (!cancelled && current) {
+          if (typeof current.systemName === 'string') {
+            setSystemName(current.systemName || 'AI-Server')
+          }
+          if (current.modules && current.modules.n8n && typeof current.modules.n8n.enabled === 'boolean') {
+            setN8nEnabled(current.modules.n8n.enabled)
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    loadSettings()
+
+    const handler = (event: any) => {
+      const detail = event && event.detail
+      if (detail) {
+        if (typeof detail.systemName === 'string') {
+          setSystemName(detail.systemName || 'AI-Server')
+        }
+        if (detail.modules && detail.modules.n8n && typeof detail.modules.n8n.enabled === 'boolean') {
+          setN8nEnabled(detail.modules.n8n.enabled)
+        }
+      } else {
+        loadSettings()
+      }
+    }
+
+    window.addEventListener('appSettingsUpdated', handler as EventListener)
+
+    return () => {
+      cancelled = true
+      window.removeEventListener('appSettingsUpdated', handler as EventListener)
+    }
+  }, [])
 
   return (
     <div
@@ -56,14 +101,16 @@ export function AppLayout() {
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
               </div>
               <div className="leading-tight">
-                <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">AI-Server</div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">{systemName || 'AI-Server'}</div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400">AI 服务管理平台</div>
               </div>
             </div>
 
             <nav className="hidden items-center lg:flex">
               <div className="flex items-center gap-1 rounded-full border border-white/60 bg-white/80 p-1 text-xs font-medium text-slate-600 shadow-sm shadow-black/5 backdrop-blur-xl dark:border-white/15 dark:bg-slate-900/70 dark:text-slate-200">
-                {topTabs.map((tab) => {
+                {topTabs
+                  .filter((tab) => (tab.key === 'n8n' ? n8nEnabled : true))
+                  .map((tab) => {
                   const isActive = location.pathname === tab.path
                   return (
                     <NavLink
@@ -126,7 +173,7 @@ export function AppLayout() {
               <div className="mb-2 flex items-center justify-between px-2">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">导航</div>
-                  <div className="text-[11px] text-slate-500">AI-Server 控制中心</div>
+                  <div className="text-[11px] text-slate-500">{(systemName || 'AI-Server') + ' 控制中心'}</div>
                 </div>
                 <StatusDot status="running" />
               </div>

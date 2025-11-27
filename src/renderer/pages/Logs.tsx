@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Download, Filter, RefreshCcw, Trash2 } from 'lucide-react'
 import { GlassCard } from '@/components/GlassCard'
 import { Button } from '@/components/ui/button'
@@ -237,6 +238,7 @@ const levelColors: Record<LogLevel, string> = {
 }
 
 export function LogsPage() {
+  const [searchParams] = useSearchParams()
   const [moduleFilter, setModuleFilter] = useState<'all' | LogItem['module']>('all')
   const [levelFilter, setLevelFilter] = useState<'all' | LogLevel>('all')
   const [page, setPage] = useState(1)
@@ -246,6 +248,16 @@ export function LogsPage() {
   const [exporting, setExporting] = useState(false)
   const [loading, setLoading] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+
+  useEffect(() => {
+    const qp = searchParams.get('module') as LogItem['module'] | null
+    const allowed: LogItem['module'][] = ['client', 'n8n', 'dify', 'oneapi', 'ragflow', 'system']
+    if (qp && allowed.includes(qp)) {
+      setModuleFilter(qp)
+    } else {
+      setModuleFilter('all')
+    }
+  }, [searchParams])
 
   useEffect(() => {
     setPage(1)

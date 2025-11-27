@@ -124,13 +124,19 @@ export function DashboardPage() {
 
   const reloadStatus = useCallback(async () => {
     try {
-      const [dockerStatus, modules] = await Promise.all([
+      const [dockerStatus, modules, appSettings] = await Promise.all([
         window.api.getDockerStatus(),
         window.api.listModules(),
+        window.api.getSettings(),
       ])
 
       setDockerStatus(dockerStatus)
-      setServices(modules.map(mapModuleToService))
+      const enabledModules = modules.filter((m) => {
+        const moduleSettings = appSettings?.modules?.[m.id]
+        if (!moduleSettings) return true
+        return moduleSettings.enabled
+      })
+      setServices(enabledModules.map(mapModuleToService))
     } catch (_err) {
       setDockerStatus(null)
       setServices([])
@@ -146,6 +152,18 @@ export function DashboardPage() {
     reloadStatus()
 
     return () => window.clearInterval(id)
+  }, [reloadStatus])
+
+  useEffect(() => {
+    const handler = () => {
+      reloadStatus()
+    }
+
+    window.addEventListener('appSettingsUpdated', handler as EventListener)
+
+    return () => {
+      window.removeEventListener('appSettingsUpdated', handler as EventListener)
+    }
   }, [reloadStatus])
 
   const handleToggleService = (key: ServiceKey, currentStatus: ServiceStatus) => {
@@ -459,7 +477,7 @@ export function DashboardPage() {
         </div>
       </GlassCard>
 
-      <GlassCard className="flex items-center justify-between gap-2 rounded-2xl px-3 py-1.5">
+      <GlassCard className="flex items-center justify-between gap-2 rounded-2xl pl-3 pr-1.5 py-1">
         <div className="flex items-center gap-3 text-[10px] text-slate-700 dark:text-slate-200">
           <div className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl bg-sky-50 px-3 py-[3px] border border-sky-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),inset_0_-1px_0_rgba(148,163,184,0.45)] dark:bg-slate-900/70 dark:border-sky-500/60 dark:text-slate-50 dark:shadow-[inset_0_1px_0_rgba(148,163,184,0.9),inset_0_-1px_0_rgba(15,23,42,0.95)]">
             <span className="uppercase tracking-wide text-slate-500 dark:text-slate-300">Docker 服务</span>
@@ -641,7 +659,12 @@ export function DashboardPage() {
                     </Button>
                   )}
                 </div>
-                <Button size="sm" variant="ghost" className="px-2 text-[11px] text-slate-500">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="px-2 text-[11px] text-slate-500"
+                  onClick={() => navigate(`/logs?module=${service.key}`)}
+                >
                   <FileText className="mr-1 h-3 w-3" />
                   查看日志
                 </Button>

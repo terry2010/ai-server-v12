@@ -1,4 +1,4 @@
-import { app, ipcMain } from 'electron'
+import { app, ipcMain, shell } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { exec } from 'node:child_process'
@@ -238,6 +238,9 @@ let modules = [
   },
 ]
 
+/** @type {number} */
+let logsClearSinceUnix = 0
+
 /** @type {Record<import('../shared/types').ModuleId, { containerNames: string[] }>}*/
 const moduleDockerConfig = {
   n8n: { containerNames: ['ai-server-n8n', 'n8n'] },
@@ -263,6 +266,38 @@ const ONEAPI_DATA_VOLUME_NAME = 'ai-server-oneapi-data'
 const REDIS_IMAGE = 'redis:latest'
 const REDIS_CONTAINER_NAME = 'ai-server-redis'
 const REDIS_DATA_VOLUME_NAME = 'ai-server-redis-data'
+
+/** @type {string} */
+let HOST_TZ = ''
+try {
+  if (typeof Intl !== 'undefined' && Intl.DateTimeFormat) {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    if (tz && typeof tz === 'string') {
+      HOST_TZ = tz
+    }
+  }
+  if (!HOST_TZ && process.env.TZ && typeof process.env.TZ === 'string') {
+    HOST_TZ = process.env.TZ
+  }
+} catch {
+  HOST_TZ = ''
+}
+
+/**
+ * @param {string[]} env
+ */
+function applyHostTimeZoneToEnv(env) {
+  try {
+    if (!HOST_TZ) return env
+    const hasTz = env.some((item) => typeof item === 'string' && item.startsWith('TZ='))
+    if (!hasTz) {
+      env.push(`TZ=${HOST_TZ}`)
+    }
+  } catch {
+    // ignore
+  }
+  return env
+}
 
 const moduleBaseServiceContainers = {
   n8n: [N8N_DB_CONTAINER_NAME],
@@ -1088,14 +1123,17 @@ async function ensureN8nPostgres() {
         volume: N8N_DB_VOLUME_NAME,
       })
     }
+    const env = [
+      `POSTGRES_USER=${dbUser}`,
+      `POSTGRES_PASSWORD=${dbPassword}`,
+      `POSTGRES_DB=${dbName}`,
+    ]
+    applyHostTimeZoneToEnv(env)
+
     const container = await docker.createContainer({
       name: N8N_DB_CONTAINER_NAME,
       Image: imageRef,
-      Env: [
-        `POSTGRES_USER=${dbUser}`,
-        `POSTGRES_PASSWORD=${dbPassword}`,
-        `POSTGRES_DB=${dbName}`,
-      ],
+      Env: env,
       HostConfig: {
         RestartPolicy: {
           Name: 'always',
@@ -1240,6 +1278,8 @@ async function ensureN8nContainer(dbConfig) {
       env.push(`${key}=${value}`)
     }
   }
+
+  applyHostTimeZoneToEnv(env)
 
   try {
     const imageRef = await resolveLocalImageReference(moduleImageMap.n8n)
@@ -1533,16 +1573,18 @@ async function ensureOneApiMysql() {
         volume: MYSQL_DB_VOLUME_NAME,
       })
     }
+    const env = [
+      `MYSQL_ROOT_PASSWORD=${generateRandomPassword(24)}`,
+      `MYSQL_USER=${dbUser}`,
+      `MYSQL_PASSWORD=${dbPassword}`,
+      `MYSQL_DATABASE=${dbName}`,
+    ]
+    applyHostTimeZoneToEnv(env)
+
     const container = await docker.createContainer({
       name: MYSQL_DB_CONTAINER_NAME,
       Image: imageRef,
-      Env: [
-        `MYSQL_ROOT_PASSWORD=${generateRandomPassword(24)}`,
-        `MYSQL_USER=${dbUser}`,
-        `MYSQL_PASSWORD=${dbPassword}`,
-        `MYSQL_DATABASE=${dbName}`,
-        'TZ=Asia/Shanghai',
-      ],
+      Env: env,
       HostConfig: {
         RestartPolicy: {
           Name: 'always',
@@ -1712,9 +1754,13 @@ async function ensureOneApiRedis() {
         volume: REDIS_DATA_VOLUME_NAME,
       })
     }
+    const redisEnv = []
+    applyHostTimeZoneToEnv(redisEnv)
+
     const container = await docker.createContainer({
       name: REDIS_CONTAINER_NAME,
       Image: imageRef,
+      Env: redisEnv,
       HostConfig: {
         RestartPolicy: {
           Name: 'always',
@@ -2716,30 +2762,333 @@ export function setupIpcHandlers() {
   })
 
   // Logs
+  async function collectAllLogsForQuery(moduleFilter, levelFilter, startTime, endTime) {
+    /** @type {import('../shared/types').LogItem[]} */
+    let all = logsClearSinceUnix > 0 ? [] : logs.slice()
+
+    const getNextId = () => {
+      if (!all.length) return 1
+      let maxId = 0
+      for (const item of all) {
+        if (typeof item.id === 'number' && item.id > maxId) {
+          maxId = item.id
+        }
+      }
+      return maxId + 1
+    }
+
+    const formatIsoToLogTimestamp = (value) => {
+      try {
+        if (value == null) return ''
+        const raw = String(value)
+        const isoString = raw.replace(/^[^\d]*/, '').trim()
+
+        const direct = isoString.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/)
+        if (direct) {
+          return `${direct[1]} ${direct[2]}`
+        }
+
+        const d = new Date(isoString)
+        if (!Number.isNaN(d.getTime())) {
+          const pad = (n) => String(n).padStart(2, '0')
+          const yyyy = d.getFullYear()
+          const MM = pad(d.getMonth() + 1)
+          const dd = pad(d.getDate())
+          const hh = pad(d.getHours())
+          const mm = pad(d.getMinutes())
+          const ss = pad(d.getSeconds())
+          return `${yyyy}-${MM}-${dd} ${hh}:${mm}:${ss}`
+        }
+
+        return isoString
+      } catch {
+        return value == null ? '' : String(value)
+      }
+    }
+
+    /** @type {import('../shared/types').LogModule | 'all'} */
+    const moduleFilterValue = moduleFilter || 'all'
+
+    /** @type {import('../shared/types').ModuleId[]} */
+    const containerModules =
+      moduleFilterValue === 'all'
+        ? ['n8n', 'dify', 'oneapi', 'ragflow']
+        : moduleFilterValue === 'client' || moduleFilterValue === 'system'
+        ? []
+        : [moduleFilterValue]
+
+    if (containerModules.length > 0) {
+      let docker = null
+      try {
+        const dockerStatus = await detectDockerStatus()
+        if (dockerStatus.installed && dockerStatus.running) {
+          docker = getDockerClient()
+        }
+      } catch {
+        docker = null
+      }
+
+      if (docker) {
+        let containers = []
+        try {
+          containers = await docker.listContainers({ all: true })
+        } catch {
+          containers = []
+        }
+
+        let nextId = getNextId()
+
+        const sinceOpt = logsClearSinceUnix > 0 ? logsClearSinceUnix : undefined
+
+        for (const moduleId of containerModules) {
+          const config = moduleDockerConfig[moduleId]
+          if (!config) continue
+
+          const matched = containers.filter((c) => {
+            if (!Array.isArray(c.Names)) return false
+            return c.Names.some((name) =>
+              config.containerNames.some(
+                (needle) => typeof name === 'string' && name.includes(needle),
+              ),
+            )
+          })
+
+          for (const info of matched) {
+            const container = docker.getContainer(info.Id)
+
+            const pushFromLogs = (raw, level) => {
+              if (!raw) return
+
+              let lastTimestamp = ''
+
+              const processText = (text) => {
+                const lines = String(text || '').split(/\r?\n/)
+                for (const rawLine of lines) {
+                  const cleaned = String(rawLine || '')
+                    .replace(/^[^\d]*(\d{4}-\d{2}-\d{2}T)/, '$1')
+                    .trim()
+                  const line = cleaned
+                  if (!line) continue
+
+                  // 1) 纯 ISO 时间头（只有时间，没有正文）
+                  const tsOnly = line.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(?:\.\d+)?Z?$/)
+                  if (tsOnly) {
+                    lastTimestamp = formatIsoToLogTimestamp(line)
+                    continue
+                  }
+
+                  let ts = ''
+                  let msg = ''
+
+                  // 2) 同一行里既有 ISO 时间又有正文
+                  const withTs = line.match(
+                    /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)\s+(.*)$/,
+                  )
+                  if (withTs) {
+                    ts = formatIsoToLogTimestamp(withTs[1])
+                    msg = withTs[2]
+                    lastTimestamp = ts
+                  } else if (lastTimestamp) {
+                    // 3) 继承上一行时间头
+                    ts = lastTimestamp
+                    msg = line
+                  } else {
+                    // 4) 兜底：尝试把前半段当作时间
+                    const index = line.indexOf(' ')
+                    if (index > 0) {
+                      ts = formatIsoToLogTimestamp(line.slice(0, index))
+                      msg = line.slice(index + 1)
+                    } else {
+                      ts = formatIsoToLogTimestamp(new Date().toISOString())
+                      msg = line
+                    }
+                  }
+
+                  // 去掉 ANSI 颜色码
+                  msg = msg.replace(/\u001b\[[0-9;]*m/g, '')
+
+                  // 去掉消息开头形如 "YYYY/MM/DD HH:mm:ss " 的时间前缀
+                  msg = msg.replace(/^(\d{4}\/\d{2}\/\d{2})\s+\d{2}:\d{2}:\d{2}\s+/, '')
+
+                  // 去掉 OneAPI 日志里的 "[INFO] 2025/11/28 - 04:34:24 |" 这一类前缀
+                  const oneApiPrefix = msg.match(
+                    /^\[[A-Z]+\]\s+\d{4}\/\d{2}\/\d{2}\s*-\s*\d{2}:\d{2}:\d{2}\s*\|\s*(.*)$/,
+                  )
+                  if (oneApiPrefix) {
+                    msg = oneApiPrefix[1]
+                  }
+
+                  /** @type {import('../shared/types').LogItem} */
+                  const item = {
+                    id: nextId++,
+                    timestamp: ts,
+                    level,
+                    module: moduleId,
+                    service:
+                      (Array.isArray(info.Names) && info.Names[0]) ||
+                      (config.containerNames && config.containerNames[0]) ||
+                      moduleId,
+                    message: msg,
+                  }
+
+                  all.push(item)
+                }
+              }
+
+              if (Buffer.isBuffer(raw) && raw.length >= 8) {
+                let offset = 0
+                let usedDemux = false
+                while (offset + 8 <= raw.length) {
+                  const streamType = raw[offset]
+                  const isHeader =
+                    (streamType === 0 || streamType === 1 || streamType === 2) &&
+                    raw[offset + 1] === 0 &&
+                    raw[offset + 2] === 0 &&
+                    raw[offset + 3] === 0
+                  const size = raw.readUInt32BE(offset + 4)
+                  if (!isHeader || size <= 0 || offset + 8 + size > raw.length) {
+                    break
+                  }
+                  usedDemux = true
+                  offset += 8
+                  const chunk = raw.slice(offset, offset + size).toString('utf-8')
+                  offset += size
+                  processText(chunk)
+                }
+
+                if (usedDemux) return
+              }
+
+              processText(raw.toString('utf-8'))
+            }
+
+            try {
+              const stdout = await container.logs({
+                stdout: true,
+                stderr: false,
+                timestamps: true,
+                since: sinceOpt,
+              })
+              pushFromLogs(stdout, 'info')
+            } catch {}
+
+            try {
+              const stderr = await container.logs({
+                stdout: false,
+                stderr: true,
+                timestamps: true,
+                since: sinceOpt,
+              })
+              pushFromLogs(stderr, 'error')
+            } catch {}
+          }
+        }
+      }
+    }
+
+    if (moduleFilterValue !== 'all') {
+      all = all.filter((log) => log.module === moduleFilterValue)
+    }
+
+    const levelFilterValue = levelFilter || 'all'
+    if (levelFilterValue !== 'all') {
+      all = all.filter((log) => log.level === levelFilterValue)
+    }
+
+    let start = typeof startTime === 'string' ? startTime.trim() : ''
+    let end = typeof endTime === 'string' ? endTime.trim() : ''
+    if (start && end && start > end) {
+      const tmp = start
+      start = end
+      end = tmp
+    }
+
+    if (start || end) {
+      all = all.filter((log) => {
+        const ts = typeof log.timestamp === 'string' ? log.timestamp : ''
+        if (!ts) return false
+        if (start && ts < start) return false
+        if (end && ts > end) return false
+        return true
+      })
+    }
+
+    all.sort((a, b) => {
+      if (a.timestamp === b.timestamp) return 0
+      return a.timestamp < b.timestamp ? 1 : -1
+    })
+
+    return all
+  }
+
   ipcMain.handle('logs:list', async (_event, payload) => {
     const moduleFilter = payload?.module ?? 'all'
     const levelFilter = payload?.level ?? 'all'
     const page = payload?.page ?? 1
     const pageSize = payload?.pageSize ?? 20
+    const startTime = payload?.startTime || ''
+    const endTime = payload?.endTime || ''
 
-    let filtered = logs.slice()
-    if (moduleFilter !== 'all') {
-      filtered = filtered.filter((log) => log.module === moduleFilter)
-    }
-    if (levelFilter !== 'all') {
-      filtered = filtered.filter((log) => log.level === levelFilter)
-    }
-
-    const total = filtered.length
+    const all = await collectAllLogsForQuery(moduleFilter, levelFilter, startTime, endTime)
+    const total = all.length
     const start = (page - 1) * pageSize
-    const items = filtered.slice(start, start + pageSize)
+    const items = all.slice(start, start + pageSize)
 
     return { items, total }
   })
 
-  ipcMain.handle('logs:export', async () => {
-    // 暂时不做真实导出，返回 mock 结果
-    return { success: true, path: 'mock-logs.log' }
+  ipcMain.handle('logs:export', async (_event, payload) => {
+    const moduleFilter = payload?.module ?? 'all'
+    const levelFilter = payload?.level ?? 'all'
+    const startTime = payload?.startTime || ''
+    const endTime = payload?.endTime || ''
+
+    const all = await collectAllLogsForQuery(moduleFilter, levelFilter, startTime, endTime)
+
+    try {
+      const userDataDir = app.getPath('userData')
+      const logsDir = path.join(userDataDir, 'logs')
+      fs.mkdirSync(logsDir, { recursive: true })
+
+      const now = new Date()
+      const pad = (n) => String(n).padStart(2, '0')
+      const yyyy = now.getFullYear()
+      const MM = pad(now.getMonth() + 1)
+      const dd = pad(now.getDate())
+      const hh = pad(now.getHours())
+      const mm = pad(now.getMinutes())
+      const ss = pad(now.getSeconds())
+      const defaultName = `logs-${yyyy}${MM}${dd}-${hh}${mm}${ss}.json`
+
+      let filename = payload?.filename || defaultName
+      if (!filename.toLowerCase().endsWith('.json')) {
+        filename += '.json'
+      }
+
+      const fullPath = path.join(logsDir, filename)
+      fs.writeFileSync(fullPath, JSON.stringify(all, null, 2), 'utf-8')
+
+      try {
+        shell.showItemInFolder(fullPath)
+      } catch {
+        // ignore
+      }
+
+      return { success: true, path: fullPath }
+    } catch (error) {
+      const message = error && error.message ? error.message : String(error)
+      return { success: false, error: `导出日志失败：${message}` }
+    }
+  })
+
+  ipcMain.handle('logs:clear', async () => {
+    try {
+      logsClearSinceUnix = Math.floor(Date.now() / 1000)
+      return { success: true }
+    } catch {
+      logsClearSinceUnix = 0
+      return { success: false }
+    }
   })
 
   ipcMain.handle('debug:dockerStopAll', async () => {

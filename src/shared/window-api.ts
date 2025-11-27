@@ -24,12 +24,17 @@ export interface WindowApi {
     level?: LogLevel | 'all'
     page?: number
     pageSize?: number
+    startTime?: string
+    endTime?: string
   }): Promise<{ items: LogItem[]; total: number }>
   exportLogs(params: {
     filename?: string
     module?: LogModule
     level?: LogLevel
+    startTime?: string
+    endTime?: string
   }): Promise<{ success: boolean; path?: string; error?: string }>
+  clearLogs(): Promise<{ success: boolean }>
   getSettings(): Promise<AppSettings>
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>
   dockerStopAll(): Promise<DockerActionResult>

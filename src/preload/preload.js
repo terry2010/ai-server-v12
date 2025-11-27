@@ -44,6 +44,8 @@ const api = {
       level: params.level ?? 'all',
       page: params.page ?? 1,
       pageSize: params.pageSize ?? 20,
+      startTime: params.startTime,
+      endTime: params.endTime,
     }),
 
   exportLogs: (params = {}) =>
@@ -51,7 +53,11 @@ const api = {
       filename: params.filename,
       module: params.module,
       level: params.level,
+      startTime: params.startTime,
+      endTime: params.endTime,
     }),
+
+  clearLogs: () => ipcRenderer.invoke('logs:clear', {}),
 
   getSettings: () => ipcRenderer.invoke('settings:get', {}),
 

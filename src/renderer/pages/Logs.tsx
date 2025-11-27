@@ -1,11 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Download, Filter, RefreshCcw, Trash2 } from 'lucide-react'
 import { GlassCard } from '@/components/GlassCard'
 import { Button } from '@/components/ui/button'
 import { StatusDot } from '@/components/StatusDot'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination'
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from '@/components/ui/pagination'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug'
@@ -248,6 +256,9 @@ export function LogsPage() {
   const [exporting, setExporting] = useState(false)
   const [loading, setLoading] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [isAutoRefresh, setIsAutoRefresh] = useState(true)
+  const refreshTimerRef = useRef<number | null>(null)
+  const [timeRange, setTimeRange] = useState<'all' | '5m' | '30m' | '1h' | '24h'>('all')
 
   useEffect(() => {
     const qp = searchParams.get('module') as LogItem['module'] | null
@@ -261,7 +272,7 @@ export function LogsPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [moduleFilter, levelFilter, pageSize])
+  }, [moduleFilter, levelFilter, pageSize, timeRange])
 
   useEffect(() => {
     let cancelled = false
@@ -271,11 +282,45 @@ export function LogsPage() {
         setLoading(true)
       }
       try {
+        let start: string | undefined
+        let end: string | undefined
+
+        if (timeRange !== 'all') {
+          const now = new Date()
+          const from = new Date(now.getTime())
+
+          if (timeRange === '5m') {
+            from.setMinutes(from.getMinutes() - 5)
+          } else if (timeRange === '30m') {
+            from.setMinutes(from.getMinutes() - 30)
+          } else if (timeRange === '1h') {
+            from.setHours(from.getHours() - 1)
+          } else if (timeRange === '24h') {
+            from.setDate(from.getDate() - 1)
+          }
+
+          const format = (d: Date) => {
+            const pad = (n: number) => String(n).padStart(2, '0')
+            const yyyy = d.getFullYear()
+            const MM = pad(d.getMonth() + 1)
+            const dd = pad(d.getDate())
+            const hh = pad(d.getHours())
+            const mm = pad(d.getMinutes())
+            const ss = pad(d.getSeconds())
+            return `${yyyy}-${MM}-${dd} ${hh}:${mm}:${ss}`
+          }
+
+          start = format(from)
+          end = format(now)
+        }
+
         const result = await window.api.getLogs({
           module: moduleFilter,
           level: levelFilter,
           page,
           pageSize,
+          startTime: start,
+          endTime: end,
         })
         if (!cancelled) {
           setItems(result.items)
@@ -300,13 +345,78 @@ export function LogsPage() {
     }
   }, [moduleFilter, levelFilter, page, pageSize, reloadKey])
 
+  useEffect(() => {
+    const start = () => {
+      if (refreshTimerRef.current != null) {
+        window.clearInterval(refreshTimerRef.current)
+      }
+      refreshTimerRef.current = window.setInterval(() => {
+        setReloadKey((key) => key + 1)
+      }, 1000)
+    }
+
+    const stop = () => {
+      if (refreshTimerRef.current != null) {
+        window.clearInterval(refreshTimerRef.current)
+        refreshTimerRef.current = null
+      }
+    }
+
+    if (isAutoRefresh) {
+      start()
+    } else {
+      stop()
+    }
+
+    return () => {
+      stop()
+    }
+  }, [isAutoRefresh])
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   const handleExport = async () => {
     if (exporting) return
     setExporting(true)
     try {
-      const result = await window.api.exportLogs({})
+      let start: string | undefined
+      let end: string | undefined
+
+      if (timeRange !== 'all') {
+        const now = new Date()
+        const from = new Date(now.getTime())
+
+        if (timeRange === '5m') {
+          from.setMinutes(from.getMinutes() - 5)
+        } else if (timeRange === '30m') {
+          from.setMinutes(from.getMinutes() - 30)
+        } else if (timeRange === '1h') {
+          from.setHours(from.getHours() - 1)
+        } else if (timeRange === '24h') {
+          from.setDate(from.getDate() - 1)
+        }
+
+        const format = (d: Date) => {
+          const pad = (n: number) => String(n).padStart(2, '0')
+          const yyyy = d.getFullYear()
+          const MM = pad(d.getMonth() + 1)
+          const dd = pad(d.getDate())
+          const hh = pad(d.getHours())
+          const mm = pad(d.getMinutes())
+          const ss = pad(d.getSeconds())
+          return `${yyyy}-${MM}-${dd} ${hh}:${mm}:${ss}`
+        }
+
+        start = format(from)
+        end = format(now)
+      }
+
+      const result = await window.api.exportLogs({
+        startTime: start,
+        endTime: end,
+        module: moduleFilter === 'all' ? undefined : moduleFilter,
+        level: levelFilter === 'all' ? undefined : levelFilter,
+      })
       if (result && result.success) {
         window.alert(`日志已导出到：${result.path}`)
       } else {
@@ -319,14 +429,24 @@ export function LogsPage() {
     }
   }
 
+  const handleClear = async () => {
+    try {
+      await window.api.clearLogs()
+      setPage(1)
+      setReloadKey((key) => key + 1)
+    } catch {
+      // ignore
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">系统日志</h2>
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700 dark:bg-slate-900/70 dark:text-slate-300">
-            <StatusDot status="running" />
-            <span>实时</span>
+            <StatusDot status={isAutoRefresh ? 'running' : 'stopped'} />
+            <span>{isAutoRefresh ? '实时' : '已暂停'}</span>
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -378,15 +498,53 @@ export function LogsPage() {
               </SelectContent>
             </Select>
           </div>
+          <div className="flex items-center gap-1 rounded-xl bg-white/90 px-2 py-1 text-slate-700 shadow-sm dark:bg-slate-900/70 dark:text-slate-100">
+            <span className="text-[10px] text-slate-500 dark:text-slate-400">时间范围</span>
+            <Select
+              value={timeRange}
+              onValueChange={(v) => {
+                setTimeRange(v as any)
+              }}
+            >
+              <SelectTrigger className="h-8 w-40 text-[10px]">
+                {timeRange === 'all'
+                  ? '全部'
+                  : timeRange === '5m'
+                  ? '最近 5 分钟'
+                  : timeRange === '30m'
+                  ? '最近 30 分钟'
+                  : timeRange === '1h'
+                  ? '最近 1 小时'
+                  : '最近 24 小时'}
+              </SelectTrigger>
+              <SelectContent className="min-w-[160px]">
+                <SelectItem value="all">全部</SelectItem>
+                <SelectItem value="5m">最近 5 分钟</SelectItem>
+                <SelectItem value="30m">最近 30 分钟</SelectItem>
+                <SelectItem value="1h">最近 1 小时</SelectItem>
+                <SelectItem value="24h">最近 24 小时</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Button
             size="sm"
             variant="outline"
             shine
             className="text-[11px] disabled:opacity-60 disabled:cursor-not-allowed"
-            onClick={() => setReloadKey((key) => key + 1)}
+            onClick={() => {
+              setIsAutoRefresh((prev) => {
+                const next = !prev
+                if (!prev && next) {
+                  setPage(1)
+                  setReloadKey((key) => key + 1)
+                }
+                return next
+              })
+            }}
             disabled={loading}
           >
-            <RefreshCcw className={`mr-1 h-3 w-3 ${loading ? 'animate-spin' : ''}`} /> 刷新
+            <RefreshCcw className={`mr-1 h-3 w-3 ${isAutoRefresh && !loading ? 'animate-spin' : ''}`} />
+            {isAutoRefresh ? '停止刷新' : '开始刷新'}
           </Button>
           <Button
             size="sm"
@@ -398,7 +556,7 @@ export function LogsPage() {
           >
             <Download className="mr-1 h-3 w-3" /> {exporting ? '导出中…' : '导出日志'}
           </Button>
-          <Button size="sm" variant="destructive" shine className="text-[11px]">
+          <Button size="sm" variant="destructive" shine className="text-[11px]" onClick={handleClear}>
             <Trash2 className="mr-1 h-3 w-3" /> 清空
           </Button>
         </div>
@@ -411,7 +569,7 @@ export function LogsPage() {
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-[110px]">时间</TableHead>
                 <TableHead className="w-[70px]">级别</TableHead>
-                <TableHead className="w-[160px]">模块 / 服务</TableHead>
+                <TableHead className="w-[170px] whitespace-nowrap">模块 / 服务</TableHead>
                 <TableHead>消息</TableHead>
               </TableRow>
             </TableHeader>
@@ -420,10 +578,10 @@ export function LogsPage() {
                 const [datePart, timePart] = log.timestamp.split(' ')
                 return (
                   <TableRow key={log.id}>
-                    <TableCell className="tabular-nums text-slate-500 dark:text-slate-400">
+                    <TableCell className="tabular-nums text-slate-800 dark:text-slate-100">
                       <div className="flex flex-col leading-tight">
-                        <span>{datePart}</span>
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500">{timePart}</span>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500">{datePart}</span>
+                        <span className="text-xs font-medium text-slate-800 dark:text-slate-100">{timePart}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -433,13 +591,15 @@ export function LogsPage() {
                         {log.level.toUpperCase()}
                       </span>
                     </TableCell>
-                    <TableCell className="text-slate-700 dark:text-slate-300">
+                    <TableCell className="whitespace-nowrap text-slate-700 dark:text-slate-300">
                       <div className="flex flex-col leading-tight">
                         <span>{log.module}</span>
                         <span className="text-[10px] text-slate-500 dark:text-slate-400">{log.service}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="truncate text-slate-800 dark:text-slate-100">{log.message}</TableCell>
+                    <TableCell className="whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100">
+                      {log.message}
+                    </TableCell>
                   </TableRow>
                 )
               })}
@@ -496,9 +656,12 @@ export function LogsPage() {
                   }}
                 />
               </PaginationItem>
-              {Array.from({ length: totalPages }).map((_, index) => {
-                const p = index + 1
-                return (
+
+              {(() => {
+                const items = [] as JSX.Element[]
+                const maxButtons = 7
+
+                const renderPage = (p: number) => (
                   <PaginationItem key={p}>
                     <PaginationLink
                       href="#"
@@ -512,7 +675,46 @@ export function LogsPage() {
                     </PaginationLink>
                   </PaginationItem>
                 )
-              })}
+
+                if (totalPages <= maxButtons) {
+                  for (let p = 1; p <= totalPages; p++) {
+                    items.push(renderPage(p))
+                  }
+                } else {
+                  const showLeftEllipsis = page > 4
+                  const showRightEllipsis = page < totalPages - 3
+
+                  items.push(renderPage(1))
+
+                  if (showLeftEllipsis) {
+                    items.push(
+                      <PaginationItem key="left-ellipsis">
+                        <PaginationEllipsis />
+                      </PaginationItem>,
+                    )
+                  }
+
+                  const start = showLeftEllipsis ? page - 1 : 2
+                  const end = showRightEllipsis ? page + 1 : totalPages - 1
+
+                  for (let p = start; p <= end; p++) {
+                    items.push(renderPage(p))
+                  }
+
+                  if (showRightEllipsis) {
+                    items.push(
+                      <PaginationItem key="right-ellipsis">
+                        <PaginationEllipsis />
+                      </PaginationItem>,
+                    )
+                  }
+
+                  items.push(renderPage(totalPages))
+                }
+
+                return items
+              })()}
+
               <PaginationItem>
                 <PaginationNext
                   href="#"

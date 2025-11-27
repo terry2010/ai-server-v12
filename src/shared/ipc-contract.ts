@@ -23,12 +23,17 @@ export interface IpcRequestMap {
     level?: LogLevel | 'all'
     page?: number
     pageSize?: number
+    startTime?: string
+    endTime?: string
   }
   'logs:export': {
     filename?: string
     module?: LogModule
     level?: LogLevel
+    startTime?: string
+    endTime?: string
   }
+  'logs:clear': EmptyPayload
   'settings:get': EmptyPayload
   'settings:update': Partial<AppSettings>
   'debug:dockerStopAll': EmptyPayload
@@ -46,6 +51,7 @@ export interface IpcResponseMap {
   'modules:stop': { success: boolean; error?: string }
   'logs:list': { items: LogItem[]; total: number }
   'logs:export': { success: boolean; path?: string; error?: string }
+  'logs:clear': { success: boolean }
   'settings:get': AppSettings
   'settings:update': AppSettings
   'debug:dockerStopAll': DockerActionResult

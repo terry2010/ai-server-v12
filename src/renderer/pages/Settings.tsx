@@ -347,10 +347,9 @@ function NetworkSettings({ settings, loading, saving, onChange, onSave }: Networ
 
   const mirrors = settings.docker.mirrorUrls
   const proxy = settings.docker.proxy
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
 
-  const updateMirrors = (index: number, value: string) => {
-    const nextMirrors = [...mirrors]
-    nextMirrors[index] = value
+  const updateMirrorUrls = (nextMirrors: string[]) => {
     onChange({
       ...settings,
       docker: {
@@ -359,6 +358,32 @@ function NetworkSettings({ settings, loading, saving, onChange, onSave }: Networ
       },
     })
   }
+
+  const handleMirrorChange = (index: number, value: string) => {
+    const nextMirrors = [...mirrors]
+    nextMirrors[index] = value
+    updateMirrorUrls(nextMirrors)
+  }
+
+  const handleAddMirror = () => {
+    const nextMirrors = [...mirrors, '']
+    updateMirrorUrls(nextMirrors)
+  }
+
+  const handleRemoveMirror = (index: number) => {
+    const nextMirrors = mirrors.filter((_, i) => i !== index)
+    updateMirrorUrls(nextMirrors.length > 0 ? nextMirrors : [''])
+  }
+
+  const handleReorderMirrors = (from: number, to: number) => {
+    if (from === to) return
+    const nextMirrors = [...mirrors]
+    const [moved] = nextMirrors.splice(from, 1)
+    nextMirrors.splice(to, 0, moved)
+    updateMirrorUrls(nextMirrors)
+  }
+
+  const mirrorList = mirrors.length > 0 ? mirrors : ['']
 
   const updateProxy = (patch: Partial<typeof proxy>) => {
     onChange({
@@ -409,19 +434,42 @@ function NetworkSettings({ settings, loading, saving, onChange, onSave }: Networ
       <CardContent className="space-y-4 px-0">
         <Field label="镜像加速地址" description="为 Docker 配置多个镜像加速源。">
           <div className="space-y-2">
-            <Input
-              placeholder="https://registry.docker-cn.com"
-              className="font-mono text-xs"
-              value={mirrors[0] ?? ''}
-              onChange={(e) => updateMirrors(0, e.target.value)}
-            />
-            <Input
-              placeholder="https://hub-mirror.example.com"
-              className="font-mono text-xs"
-              value={mirrors[1] ?? ''}
-              onChange={(e) => updateMirrors(1, e.target.value)}
-            />
-            <Button variant="outline" size="sm" className="text-xs" disabled>
+            {mirrorList.map((value, index) => (
+              <div
+                key={index}
+                className="flex items-center gap-2"
+              >
+                <div
+                  className="flex h-8 w-5 cursor-grab items-center justify-center text-[11px] text-slate-400"
+                  draggable
+                  onDragStart={() => setDragIndex(index)}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    if (dragIndex === null || dragIndex === index) return
+                    handleReorderMirrors(dragIndex, index)
+                    setDragIndex(index)
+                  }}
+                  onDragEnd={() => setDragIndex(null)}
+                >
+                  ≡
+                </div>
+                <Input
+                  placeholder={index === 0 ? 'https://registry.docker-cn.com' : 'https://hub-mirror.example.com'}
+                  className="font-mono text-xs flex-1"
+                  value={value}
+                  onChange={(e) => handleMirrorChange(index, e.target.value)}
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 text-xs"
+                  onClick={() => handleRemoveMirror(index)}
+                >
+                  ×
+                </Button>
+              </div>
+            ))}
+            <Button variant="outline" size="sm" className="text-xs" onClick={handleAddMirror}>
               添加一行
             </Button>
           </div>

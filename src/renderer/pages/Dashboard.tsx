@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Activity,
   ArrowRight,
@@ -36,6 +37,7 @@ export interface ServiceModule {
   description: string
   status: ServiceStatus
   metrics: ServiceMetrics
+  lastError?: string | null
 }
 
 const statusPillStyles: Record<ServiceStatus, string> = {
@@ -69,6 +71,7 @@ const mapModuleToService = (module: ModuleInfo): ServiceModule => {
       port: module.port != null ? String(module.port) : '—',
       uptime,
     },
+    lastError: null,
   }
 }
 
@@ -109,6 +112,7 @@ export function DashboardPage() {
   const [dockerStatus, setDockerStatus] = useState<DockerStatus | null>(null)
   const [isStartingDocker, setIsStartingDocker] = useState(false)
   const [activeHeroIndex, setActiveHeroIndex] = useState(0)
+  const navigate = useNavigate()
 
   const dockerInstalled = dockerStatus?.installed ?? false
   const dockerRunning = dockerStatus?.running ?? false
@@ -162,36 +166,38 @@ export function DashboardPage() {
         .stopModule(key)
         .then((result) => {
           if (!result || !result.success) {
+            const message = result?.error ?? '停止模块失败，请检查 Docker 状态。'
             setServices((prev) =>
-              prev.map((s) => (s.key === key ? { ...s, status: 'error' } : s)),
+              prev.map((s) =>
+                s.key === key
+                  ? {
+                      ...s,
+                      status: 'error',
+                      lastError: message,
+                    }
+                  : s,
+              ),
             )
-            if (result?.error) {
-              window.alert(result.error)
-            } else {
-              window.alert('停止模块失败，请检查 Docker 状态。')
-            }
+            window.alert(message)
+          } else {
+            reloadStatus()
           }
         })
         .catch(() => {
+          const message = '停止模块失败，请检查 Docker 状态。'
           setServices((prev) =>
-            prev.map((s) => (s.key === key ? { ...s, status: 'error' } : s)),
+            prev.map((s) =>
+              s.key === key
+                ? {
+                    ...s,
+                    status: 'error',
+                    lastError: message,
+                  }
+                : s,
+            ),
           )
-          window.alert('停止模块失败，请检查 Docker 状态。')
+          window.alert(message)
         })
-
-      window.setTimeout(() => {
-        setServices((current) =>
-          current.map((s) =>
-            s.key === key && s.status === 'stopping'
-              ? {
-                  ...s,
-                  status: 'stopped',
-                  metrics: { ...s.metrics, cpu: 0, memory: 0, uptime: '—' },
-                }
-              : s,
-          ),
-        )
-      }, 1500)
     } else if (currentStatus === 'stopped' || currentStatus === 'error') {
       setServices((prev) =>
         prev.map((s) =>
@@ -200,6 +206,7 @@ export function DashboardPage() {
                 ...s,
                 status: 'starting',
                 metrics: { ...s.metrics, uptime: '启动中…' },
+                lastError: null,
               }
             : s,
         ),
@@ -209,36 +216,38 @@ export function DashboardPage() {
         .startModule(key)
         .then((result) => {
           if (!result || !result.success) {
+            const message = result?.error ?? '启动模块失败，请检查 Docker 状态。'
             setServices((prev) =>
-              prev.map((s) => (s.key === key ? { ...s, status: 'error' } : s)),
+              prev.map((s) =>
+                s.key === key
+                  ? {
+                      ...s,
+                      status: 'error',
+                      lastError: message,
+                    }
+                  : s,
+              ),
             )
-            if (result?.error) {
-              window.alert(result.error)
-            } else {
-              window.alert('启动模块失败，请检查 Docker 状态。')
-            }
+            window.alert(message)
+          } else {
+            reloadStatus()
           }
         })
         .catch(() => {
+          const message = '启动模块失败，请检查 Docker 状态。'
           setServices((prev) =>
-            prev.map((s) => (s.key === key ? { ...s, status: 'error' } : s)),
+            prev.map((s) =>
+              s.key === key
+                ? {
+                    ...s,
+                    status: 'error',
+                    lastError: message,
+                  }
+                : s,
+            ),
           )
-          window.alert('启动模块失败，请检查 Docker 状态。')
+          window.alert(message)
         })
-
-      window.setTimeout(() => {
-        setServices((current) =>
-          current.map((s) =>
-            s.key === key && s.status === 'starting'
-              ? {
-                  ...s,
-                  status: 'running',
-                  metrics: { ...s.metrics, cpu: 18, memory: 32, uptime: '已启动' },
-                }
-              : s,
-          ),
-        )
-      }, 1500)
     }
   }
 
@@ -250,6 +259,19 @@ export function DashboardPage() {
     toStart.forEach((service) => {
       handleToggleService(service.key, service.status)
     })
+  }
+
+  const handleOpenModule = (key: ServiceKey) => {
+    const routeMap: Record<ServiceKey, string> = {
+      n8n: '/n8n',
+      dify: '/dify',
+      oneapi: '/oneapi',
+      ragflow: '/ragflow',
+    }
+
+    const path = routeMap[key]
+    if (!path) return
+    navigate(path)
   }
 
   const handleDockerAction = async () => {
@@ -506,7 +528,7 @@ export function DashboardPage() {
         {services.map((service) => (
           <Card
             key={service.key}
-            className="relative overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl hover:bg-slate-50/100 dark:hover:bg-slate-800/90"
+            className="relative transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl hover:bg-slate-50/100 dark:hover:bg-slate-800/90"
           >
             <CardHeader>
               <div className="flex items-start justify-between gap-2">
@@ -525,7 +547,21 @@ export function DashboardPage() {
                   <div
                     className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${statusPillStyles[service.status]}`}
                   >
-                    <StatusDot status={service.status} />
+                    <div className="group relative inline-flex items-center">
+                      <StatusDot
+                        status={service.status}
+                        className={
+                          service.status === 'error' && service.lastError
+                            ? 'cursor-help'
+                            : undefined
+                        }
+                      />
+                      {service.status === 'error' && service.lastError && (
+                        <div className="pointer-events-none absolute right-full top-1/2 z-10 -translate-y-1/2 -translate-x-2 min-w-[12rem] max-w-xs rounded-md bg-slate-900/90 px-2 py-1 text-[10px] text-slate-50 text-left opacity-0 shadow-sm transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 dark:bg-slate-100 dark:text-slate-900 whitespace-normal break-words">
+                          {service.lastError}
+                        </div>
+                      )}
+                    </div>
                     <span>
                       {service.status === 'running'
                         ? '运行中'
@@ -593,6 +629,17 @@ export function DashboardPage() {
                       </>
                     )}
                   </Button>
+                  {service.status === 'running' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="px-2 text-[11px]"
+                      onClick={() => handleOpenModule(service.key)}
+                    >
+                      <ExternalLink className="mr-1 h-3 w-3" />
+                      打开
+                    </Button>
+                  )}
                 </div>
                 <Button size="sm" variant="ghost" className="px-2 text-[11px] text-slate-500">
                   <FileText className="mr-1 h-3 w-3" />

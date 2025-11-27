@@ -65,6 +65,24 @@ export interface DockerActionResult {
   stderrSnippet?: string
 }
 
+export interface SystemMetrics {
+  cpuUsage: number
+  memoryUsage: number
+  memoryTotal: number
+  memoryUsed: number
+  diskUsage: number
+  diskTotal: number
+  diskUsed: number
+}
+
+export interface ModuleRuntimeMetrics {
+  moduleId: ModuleId
+  name: string
+  status: ModuleStatus
+  cpuUsage: number | null
+  memoryUsage: number | null
+}
+
 export interface ModuleSettings {
   enabled: boolean
   port: number

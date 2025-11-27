@@ -62,6 +62,10 @@ const api = {
   getSettings: () => ipcRenderer.invoke('settings:get', {}),
 
   updateSettings: (patch) => ipcRenderer.invoke('settings:update', patch ?? {}),
+
+  getSystemMetrics: () => ipcRenderer.invoke('monitor:getSystem', {}),
+
+  getModuleMetrics: () => ipcRenderer.invoke('monitor:getModules', {}),
 }
 
 contextBridge.exposeInMainWorld('api', api)

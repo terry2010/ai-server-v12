@@ -1,41 +1,143 @@
+import { useEffect, useRef, useState } from 'react'
 import { GlassCard } from '@/components/GlassCard'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusDot } from '@/components/StatusDot'
 import { Activity, AlignLeft, BarChart2, Cpu, Gauge, MemoryStick, Network, Timer } from 'lucide-react'
 
-interface ResourceMetric {
-  label: string
-  value: number
+type ServiceStatus = 'running' | 'stopped' | 'error'
+
+interface SystemState {
+  cpuUsage: number
+  memoryUsage: number
+  memoryTotal: number
+  memoryUsed: number
+  diskUsage: number
+  diskTotal: number
+  diskUsed: number
 }
 
-const resourceMetrics: ResourceMetric[] = [
-  { label: 'CPU', value: 46 },
-  { label: '内存', value: 62 },
-  { label: '磁盘', value: 38 },
-  { label: '网络', value: 24 },
-]
+interface ModuleMetricViewModel {
+  id: string
+  name: string
+  status: ServiceStatus
+  cpu: number | null
+  memory: number | null
+}
 
 export function MonitoringPage() {
+  const [system, setSystem] = useState<SystemState | null>(null)
+  const [modules, setModules] = useState<ModuleMetricViewModel[]>([])
+  const [loading, setLoading] = useState(false)
+  const [autoRefresh, setAutoRefresh] = useState(true)
+  const timerRef = useRef<number | null>(null)
+
+  const fetchMetrics = async () => {
+    setLoading(true)
+    try {
+      const [sys, mod] = await Promise.all([
+        window.api.getSystemMetrics(),
+        window.api.getModuleMetrics(),
+      ])
+
+      setSystem(sys)
+
+      const items: ModuleMetricViewModel[] = (mod.items || []).map((m) => ({
+        id: m.moduleId,
+        name: m.name,
+        status: m.status as ServiceStatus,
+        cpu: m.cpuUsage == null ? null : Math.round(m.cpuUsage),
+        memory: m.memoryUsage == null ? null : Math.round(m.memoryUsage),
+      }))
+
+      setModules(items)
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchMetrics()
+  }, [])
+
+  useEffect(() => {
+    const start = () => {
+      if (timerRef.current != null) {
+        window.clearInterval(timerRef.current)
+      }
+      timerRef.current = window.setInterval(() => {
+        fetchMetrics()
+      }, 5000)
+    }
+
+    const stop = () => {
+      if (timerRef.current != null) {
+        window.clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+    }
+
+    if (autoRefresh) {
+      start()
+    } else {
+      stop()
+    }
+
+    return () => {
+      stop()
+    }
+  }, [autoRefresh])
+
+  const systemCards = system
+    ? [
+        { label: 'CPU', value: Math.round(system.cpuUsage), icon: <Cpu className="h-3 w-3" /> },
+        {
+          label: '内存',
+          value: Math.round(system.memoryUsage),
+          icon: <MemoryStick className="h-3 w-3" />,
+        },
+        {
+          label: '磁盘',
+          value: Math.round(system.diskUsage),
+          icon: <Network className="h-3 w-3" />,
+        },
+      ]
+    : []
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">性能监控</h2>
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700 dark:bg-slate-900/70 dark:text-slate-300">
-            <StatusDot status="running" />
-            实时
+            <StatusDot status={autoRefresh ? 'running' : 'stopped'} />
+            <span>{autoRefresh ? '实时' : '已暂停'}</span>
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <select className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-800 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-            <option>最近 1 小时</option>
-            <option>最近 6 小时</option>
-            <option>最近 24 小时</option>
-            <option>最近 7 天</option>
-          </select>
-          <Button size="sm" variant="outline" shine className="text-[11px]">
-            刷新
+          <Button
+            size="sm"
+            variant="outline"
+            shine
+            className="text-[11px] disabled:opacity-60 disabled:cursor-not-allowed"
+            onClick={() => {
+              fetchMetrics()
+            }}
+            disabled={loading}
+          >
+            <Gauge className={`mr-1 h-3 w-3 ${loading ? 'animate-spin' : ''}`} /> 刷新
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            shine
+            className="text-[11px] disabled:opacity-60 disabled:cursor-not-allowed"
+            onClick={() => setAutoRefresh((v) => !v)}
+          >
+            <Activity className={`mr-1 h-3 w-3 ${autoRefresh && !loading ? 'animate-pulse' : ''}`} />
+            {autoRefresh ? '停止自动刷新' : '开始自动刷新'}
           </Button>
         </div>
       </div>
@@ -46,22 +148,26 @@ export function MonitoringPage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>系统资源使用率</CardTitle>
-                <CardDescription>CPU / 内存 / 磁盘 / 网络 当前占用情况。</CardDescription>
+                <CardDescription>CPU / 内存 / 磁盘 当前占用情况。</CardDescription>
               </div>
               <Gauge className="h-5 w-5 text-sky-300" />
             </div>
           </CardHeader>
-          <CardContent className="space-y-3 px-0 pb-0 pt-2">
-            {resourceMetrics.map((m) => (
-              <div key={m.label} className="space-y-1 text-xs">
+          <CardContent className="space-y-3 px-0 pb-0 pt-2 text-xs">
+            {systemCards.length === 0 && <div className="text-slate-400">暂无法获取系统指标。</div>}
+            {systemCards.map((m) => (
+              <div key={m.label} className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-300">{m.label}</span>
-                  <span className="font-semibold text-slate-100">{m.value}%</span>
+                  <span className="inline-flex items-center gap-1 text-slate-300">
+                    {m.icon}
+                    <span>{m.label}</span>
+                  </span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{m.value}%</span>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-slate-900/80">
                   <div
                     className="h-full bg-gradient-to-r from-sky-400 via-emerald-400 to-amber-300"
-                    style={{ width: `${m.value}%` }}
+                    style={{ width: `${Math.max(0, Math.min(100, m.value))}%` }}
                   />
                 </div>
               </div>
@@ -74,16 +180,23 @@ export function MonitoringPage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>服务状态监控</CardTitle>
-                <CardDescription>各核心服务的运行状态和轻量指标。</CardDescription>
+                <CardDescription>各核心服务的运行状态和资源占用。</CardDescription>
               </div>
               <Activity className="h-5 w-5 text-emerald-300" />
             </div>
           </CardHeader>
           <CardContent className="space-y-2 px-0 pb-0 pt-2 text-xs">
-            <ServiceRow name="n8n" status="running" cpu={22} memory={41} latency="132ms" />
-            <ServiceRow name="Dify" status="stopped" cpu={0} memory={0} latency="—" />
-            <ServiceRow name="OneAPI" status="running" cpu={17} memory={28} latency="89ms" />
-            <ServiceRow name="RagFlow" status="error" cpu={5} memory={12} latency="超时" />
+            {modules.length === 0 && <div className="text-slate-400">暂无法获取模块指标。</div>}
+            {modules.map((m) => (
+              <ServiceRow
+                key={m.id}
+                name={m.name}
+                status={m.status}
+                cpu={m.cpu ?? 0}
+                memory={m.memory ?? 0}
+                latency={m.status === 'running' ? '—' : '未运行'}
+              />
+            ))}
           </CardContent>
         </GlassCard>
 
@@ -92,7 +205,7 @@ export function MonitoringPage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>CPU 使用趋势</CardTitle>
-                <CardDescription>最近一段时间的 CPU 使用情况。</CardDescription>
+                <CardDescription>当前仅展示示意曲线，后续可接入历史数据。</CardDescription>
               </div>
               <BarChart2 className="h-5 w-5 text-sky-300" />
             </div>
@@ -107,7 +220,7 @@ export function MonitoringPage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>内存使用趋势</CardTitle>
-                <CardDescription>最近一段时间的内存占用变化。</CardDescription>
+                <CardDescription>当前仅展示示意曲线，后续可接入历史数据。</CardDescription>
               </div>
               <AlignLeft className="h-5 w-5 text-violet-300" />
             </div>

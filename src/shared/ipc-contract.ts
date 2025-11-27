@@ -7,6 +7,8 @@ import type {
   ModuleId,
   ModuleInfo,
   DockerActionResult,
+  SystemMetrics,
+  ModuleRuntimeMetrics,
 } from './types'
 
 export type EmptyPayload = Record<string, never>
@@ -34,6 +36,8 @@ export interface IpcRequestMap {
     endTime?: string
   }
   'logs:clear': EmptyPayload
+  'monitor:getSystem': EmptyPayload
+  'monitor:getModules': EmptyPayload
   'settings:get': EmptyPayload
   'settings:update': Partial<AppSettings>
   'debug:dockerStopAll': EmptyPayload
@@ -52,6 +56,8 @@ export interface IpcResponseMap {
   'logs:list': { items: LogItem[]; total: number }
   'logs:export': { success: boolean; path?: string; error?: string }
   'logs:clear': { success: boolean }
+  'monitor:getSystem': SystemMetrics
+  'monitor:getModules': { items: ModuleRuntimeMetrics[] }
   'settings:get': AppSettings
   'settings:update': AppSettings
   'debug:dockerStopAll': DockerActionResult

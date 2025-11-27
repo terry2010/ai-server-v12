@@ -20,7 +20,7 @@ import { GlassCard } from '@/components/GlassCard'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusDot, type ServiceStatus } from '@/components/StatusDot'
-import type { DockerStatus, ModuleId, ModuleInfo } from '../../shared/types'
+import type { DockerStatus, ModuleId, ModuleInfo, ModuleRuntimeMetrics } from '../../shared/types'
 
 export type ServiceKey = ModuleId
 
@@ -48,7 +48,10 @@ const statusPillStyles: Record<ServiceStatus, string> = {
   error: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-200',
 }
 
-const mapModuleToService = (module: ModuleInfo): ServiceModule => {
+const mapModuleToService = (
+  module: ModuleInfo,
+  runtimeMetrics?: ModuleRuntimeMetrics | null,
+): ServiceModule => {
   const status = module.status as ServiceStatus
   const isRunning = status === 'running'
   const uptime =
@@ -60,14 +63,28 @@ const mapModuleToService = (module: ModuleInfo): ServiceModule => {
       ? '停止中…'
       : '—'
 
+  const cpu =
+    runtimeMetrics && runtimeMetrics.cpuUsage != null
+      ? Math.round(runtimeMetrics.cpuUsage)
+      : isRunning
+      ? 1
+      : 0
+
+  const memory =
+    runtimeMetrics && runtimeMetrics.memoryUsage != null
+      ? Math.round(runtimeMetrics.memoryUsage)
+      : isRunning
+      ? 1
+      : 0
+
   return {
     key: module.id,
     name: module.name,
     description: module.description,
     status,
     metrics: {
-      cpu: isRunning ? 18 : 0,
-      memory: isRunning ? 32 : 0,
+      cpu,
+      memory,
       port: module.port != null ? String(module.port) : '—',
       uptime,
     },
@@ -136,7 +153,53 @@ export function DashboardPage() {
         if (!moduleSettings) return true
         return moduleSettings.enabled
       })
-      setServices(enabledModules.map(mapModuleToService))
+
+      // 先渲染基础模块信息（不带实时指标），保证首屏速度
+      setServices(enabledModules.map((m) => mapModuleToService(m, null)))
+
+      // 在后台异步获取运行时指标，只更新 CPU/内存，不阻塞页面
+      window.api
+        .getModuleMetrics()
+        .then((moduleMetrics) => {
+          if (!moduleMetrics || !Array.isArray(moduleMetrics.items)) return
+          const metricsMap = new Map<ModuleId, ModuleRuntimeMetrics>()
+          for (const m of moduleMetrics.items) {
+            metricsMap.set(m.moduleId, m)
+          }
+
+          setServices((prev) =>
+            prev.map((s) => {
+              const runtime = metricsMap.get(s.key as ModuleId)
+              if (!runtime) return s
+
+              const cpu =
+                runtime.cpuUsage != null
+                  ? Math.round(runtime.cpuUsage)
+                  : s.status === 'running'
+                  ? 1
+                  : 0
+
+              const memory =
+                runtime.memoryUsage != null
+                  ? Math.round(runtime.memoryUsage)
+                  : s.status === 'running'
+                  ? 1
+                  : 0
+
+              return {
+                ...s,
+                metrics: {
+                  ...s.metrics,
+                  cpu,
+                  memory,
+                },
+              }
+            }),
+          )
+        })
+        .catch(() => {
+          // 忽略运行时指标错误，不影响首页加载
+        })
     } catch (_err) {
       setDockerStatus(null)
       setServices([])

@@ -7,6 +7,8 @@ import type {
   ModuleId,
   ModuleInfo,
   DockerActionResult,
+  SystemMetrics,
+  ModuleRuntimeMetrics,
 } from './types'
 
 export interface WindowApi {
@@ -35,6 +37,8 @@ export interface WindowApi {
     endTime?: string
   }): Promise<{ success: boolean; path?: string; error?: string }>
   clearLogs(): Promise<{ success: boolean }>
+  getSystemMetrics(): Promise<SystemMetrics>
+  getModuleMetrics(): Promise<{ items: ModuleRuntimeMetrics[] }>
   getSettings(): Promise<AppSettings>
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>
   dockerStopAll(): Promise<DockerActionResult>

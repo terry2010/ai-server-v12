@@ -6,6 +6,7 @@ import { promisify } from 'node:util'
 import crypto from 'node:crypto'
 import http from 'node:http'
 import Docker from 'dockerode'
+import si from 'systeminformation'
 
 // --- Docker status (real detection) + mock data for Phase 3 (modules & logs) ---
 
@@ -3088,6 +3089,154 @@ export function setupIpcHandlers() {
     } catch {
       logsClearSinceUnix = 0
       return { success: false }
+    }
+  })
+
+  // Monitoring
+  ipcMain.handle('monitor:getSystem', async () => {
+    try {
+      const [load, mem, fsInfo] = await Promise.all([
+        si.currentLoad(),
+        si.mem(),
+        si.fsSize(),
+      ])
+
+      const cpuUsage = typeof load.currentLoad === 'number' ? load.currentLoad : 0
+
+      const totalMem = typeof mem.total === 'number' ? mem.total : 0
+      const usedMem =
+        typeof mem.active === 'number'
+          ? mem.active
+          : typeof mem.used === 'number'
+          ? mem.used
+          : 0
+      const memoryUsage = totalMem > 0 ? (usedMem / totalMem) * 100 : 0
+
+      let diskTotal = 0
+      let diskUsed = 0
+      if (Array.isArray(fsInfo)) {
+        for (const d of fsInfo) {
+          const size = typeof d.size === 'number' ? d.size : 0
+          const used = typeof d.used === 'number' ? d.used : 0
+          diskTotal += size
+          diskUsed += used
+        }
+      }
+      const diskUsage = diskTotal > 0 ? (diskUsed / diskTotal) * 100 : 0
+
+      const clamp = (v) => Math.max(0, Math.min(100, v))
+
+      return {
+        cpuUsage: clamp(cpuUsage),
+        memoryUsage: clamp(memoryUsage),
+        memoryTotal: totalMem,
+        memoryUsed: usedMem,
+        diskUsage: clamp(diskUsage),
+        diskTotal,
+        diskUsed,
+      }
+    } catch {
+      return {
+        cpuUsage: 0,
+        memoryUsage: 0,
+        memoryTotal: 0,
+        memoryUsed: 0,
+        diskUsage: 0,
+        diskTotal: 0,
+        diskUsed: 0,
+      }
+    }
+  })
+
+  ipcMain.handle('monitor:getModules', async () => {
+    /** @type {import('../shared/types').ModuleRuntimeMetrics[]} */
+    const items = []
+
+    let containers = []
+    try {
+      const dockerStatus = await detectDockerStatus()
+      if (!dockerStatus.installed || !dockerStatus.running) {
+        return { items }
+      }
+      const docker = getDockerClient()
+      containers = await docker.listContainers({ all: true })
+
+      const getModuleStatus = (info) => {
+        if (!info) return 'stopped'
+        const state = String(info.State || '').toLowerCase()
+        if (state === 'running') return 'running'
+        if (state === 'restarting') return 'starting'
+        if (state === 'dead') return 'error'
+        return 'stopped'
+      }
+
+      for (const m of modules) {
+        const config = moduleDockerConfig[m.id]
+        if (!config) continue
+
+        const info =
+          containers.find((c) => {
+            if (!Array.isArray(c.Names)) return false
+            return c.Names.some((name) =>
+              config.containerNames.some(
+                (needle) => typeof name === 'string' && name.includes(needle),
+              ),
+            )
+          }) || null
+
+        let cpuUsage = null
+        let memoryUsage = null
+        const status = getModuleStatus(info)
+
+        if (info && status === 'running') {
+          try {
+            const container = getDockerClient().getContainer(info.Id)
+            const stats = await container.stats({ stream: false })
+
+            if (stats && stats.cpu_stats && stats.precpu_stats) {
+              const cpuDelta =
+                (stats.cpu_stats.cpu_usage.total_usage || 0) -
+                (stats.precpu_stats.cpu_usage.total_usage || 0)
+              const systemDelta =
+                (stats.cpu_stats.system_cpu_usage || 0) -
+                (stats.precpu_stats.system_cpu_usage || 0)
+              const cpuCount =
+                stats.cpu_stats.online_cpus ||
+                (stats.cpu_stats.cpu_usage.percpu_usage
+                  ? stats.cpu_stats.cpu_usage.percpu_usage.length
+                  : 1)
+              if (cpuDelta > 0 && systemDelta > 0) {
+                cpuUsage = (cpuDelta / systemDelta) * cpuCount * 100
+              }
+            }
+
+            if (stats && stats.memory_stats) {
+              const used = stats.memory_stats.usage || 0
+              const limit = stats.memory_stats.limit || 0
+              if (limit > 0) {
+                memoryUsage = (used / limit) * 100
+              }
+            }
+          } catch {
+            // ignore stats errors
+          }
+        }
+
+        const clamp = (v) =>
+          v == null || Number.isNaN(v) ? null : Math.max(0, Math.min(100, v))
+
+        items.push({
+          moduleId: m.id,
+          name: m.name,
+          status,
+          cpuUsage: clamp(cpuUsage),
+          memoryUsage: clamp(memoryUsage),
+        })
+      }
+
+      return { items }
+    } catch {
+      return { items }
     }
   })
 

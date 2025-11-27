@@ -29,6 +29,7 @@ export function AppLayout() {
   const [theme, setTheme] = useTheme()
   const [systemName, setSystemName] = useState('AI-Server')
   const [n8nEnabled, setN8nEnabled] = useState(true)
+  const [oneapiEnabled, setOneapiEnabled] = useState(true)
   const navigate = useNavigate()
 
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark')
@@ -46,6 +47,13 @@ export function AppLayout() {
           if (current.modules && current.modules.n8n && typeof current.modules.n8n.enabled === 'boolean') {
             setN8nEnabled(current.modules.n8n.enabled)
           }
+          if (
+            current.modules &&
+            current.modules.oneapi &&
+            typeof current.modules.oneapi.enabled === 'boolean'
+          ) {
+            setOneapiEnabled(current.modules.oneapi.enabled)
+          }
         }
       } catch {
         // ignore
@@ -62,6 +70,13 @@ export function AppLayout() {
         }
         if (detail.modules && detail.modules.n8n && typeof detail.modules.n8n.enabled === 'boolean') {
           setN8nEnabled(detail.modules.n8n.enabled)
+        }
+        if (
+          detail.modules &&
+          detail.modules.oneapi &&
+          typeof detail.modules.oneapi.enabled === 'boolean'
+        ) {
+          setOneapiEnabled(detail.modules.oneapi.enabled)
         }
       } else {
         loadSettings()
@@ -109,7 +124,11 @@ export function AppLayout() {
             <nav className="hidden items-center lg:flex">
               <div className="flex items-center gap-1 rounded-full border border-white/60 bg-white/80 p-1 text-xs font-medium text-slate-600 shadow-sm shadow-black/5 backdrop-blur-xl dark:border-white/15 dark:bg-slate-900/70 dark:text-slate-200">
                 {topTabs
-                  .filter((tab) => (tab.key === 'n8n' ? n8nEnabled : true))
+                  .filter((tab) => {
+                    if (tab.key === 'n8n') return n8nEnabled
+                    if (tab.key === 'oneapi') return oneapiEnabled
+                    return true
+                  })
                   .map((tab) => {
                   const isActive = location.pathname === tab.path
                   return (

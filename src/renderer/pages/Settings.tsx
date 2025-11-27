@@ -258,7 +258,6 @@ function SystemSettings({ settings, loading, saving, onChange, onSave }: SystemS
       </Card>
     )
   }
-
   const handleLanguageChange = (value: string) => {
     const lang = value === 'en' ? 'en' : 'zh'
     onChange({ ...settings, language: lang as AppSettings['language'] })
@@ -949,6 +948,325 @@ function ModuleSettings({ moduleKey, settings, loading, saving, onChange, onSave
           <div className="flex gap-2 pt-2">
             <Button shine disabled={saving || applyingRestart} onClick={onSave}>
               保存 n8n 设置
+            </Button>
+            <Button
+              variant="outline"
+              disabled={saving || applyingRestart}
+              onClick={handleApplyAndRestart}
+            >
+              {applyingRestart ? '应用中…' : '应用并重启'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (moduleKey === 'oneapi') {
+    const envMap = moduleSettings.env || {}
+    const secretEnv = {
+      SESSION_SECRET: envMap.SESSION_SECRET || '',
+    }
+
+    const secretEnvKeys = ['SESSION_SECRET'] as const
+    const reservedEnvKeys = ['DEBUG', 'DEBUG_SQL', 'SQL_DSN', 'REDIS_CONN_STRING', ...secretEnvKeys]
+
+    const debugEnabled = String(envMap.DEBUG || '').toLowerCase() === 'true'
+    const debugSqlEnabled = String(envMap.DEBUG_SQL || '').toLowerCase() === 'true'
+
+    const hasExternalDbEnv = Boolean(envMap.SQL_DSN || envMap.REDIS_CONN_STRING)
+    const dbMode: 'managed' | 'external' = hasExternalDbEnv ? 'external' : 'managed'
+
+    const port = moduleSettings.port || 0
+    const apiUrl = port > 0 ? `http://localhost:${port}/v1` : ''
+
+    const setEnv = (nextEnv: Record<string, string>) => {
+      updateModule({ env: nextEnv })
+    }
+
+    const handleEnvTextChange = (value: string) => {
+      const lines = value.split('\n')
+      const parsed: Record<string, string> = {}
+      for (const raw of lines) {
+        const line = raw.trim()
+        if (!line) continue
+        const index = line.indexOf('=')
+        if (index <= 0) continue
+        const key = line.slice(0, index).trim()
+        const val = line.slice(index + 1)
+        if (!key) continue
+        if (reservedEnvKeys.includes(key as (typeof reservedEnvKeys)[number])) continue
+        parsed[key] = val
+      }
+
+      const current = moduleSettings.env || {}
+      const reservedSet = new Set(reservedEnvKeys)
+      const nextEnv: Record<string, string> = {}
+
+      for (const [key, val] of Object.entries(current)) {
+        if (reservedSet.has(key as (typeof reservedEnvKeys)[number])) {
+          nextEnv[key] = val as string
+        }
+      }
+
+      for (const [key, val] of Object.entries(parsed)) {
+        if (!reservedSet.has(key as (typeof reservedEnvKeys)[number])) {
+          nextEnv[key] = val
+        }
+      }
+
+      setEnv(nextEnv)
+    }
+
+    const handleDebugToggle = (key: 'DEBUG' | 'DEBUG_SQL', checked: boolean) => {
+      const current = moduleSettings.env || {}
+      const nextEnv: Record<string, string> = {
+        ...current,
+        [key]: checked ? 'true' : 'false',
+      }
+      setEnv(nextEnv)
+    }
+
+    const handleDbModeChange = (value: string) => {
+      const current = moduleSettings.env || {}
+      const nextEnv: Record<string, string> = { ...current }
+
+      if (value === 'managed') {
+        delete nextEnv.SQL_DSN
+        delete nextEnv.REDIS_CONN_STRING
+      } else {
+        if (!nextEnv.SQL_DSN) {
+          nextEnv.SQL_DSN = 'root:123456@tcp(localhost:3306)/oneapi'
+        }
+        if (!nextEnv.REDIS_CONN_STRING) {
+          nextEnv.REDIS_CONN_STRING = 'redis://localhost:6379'
+        }
+      }
+
+      setEnv(nextEnv)
+    }
+
+    const handleExternalDbFieldChange = (field: 'sqlDsn' | 'redis', value: string) => {
+      const current = moduleSettings.env || {}
+      const nextEnv: Record<string, string> = {
+        ...current,
+      }
+      if (field === 'sqlDsn') nextEnv.SQL_DSN = value
+      if (field === 'redis') nextEnv.REDIS_CONN_STRING = value
+      setEnv(nextEnv)
+    }
+
+    const handleEnabledChange = async (checked: boolean) => {
+      if (!checked) {
+        try {
+          const modules = await window.api.listModules()
+          const target = modules.find((m) => m.id === 'oneapi')
+          if (target && (target.status === 'running' || target.status === 'starting')) {
+            toast.warning('OneAPI 模块正在运行，无法禁用。请先在首页停止服务后再尝试禁用。')
+            updateModule({ enabled: true })
+            return
+          }
+        } catch {
+          toast.error('检查 OneAPI 运行状态失败，暂时无法禁用。')
+          updateModule({ enabled: true })
+          return
+        }
+      }
+
+      updateModule({ enabled: checked })
+    }
+
+    const handlePortChange = (value: string) => {
+      const num = Number(value)
+      const portValue = Number.isFinite(num) && num > 0 ? num : 0
+      updateModule({ port: portValue })
+    }
+
+    const otherEnvEntries = Object.entries(envMap).filter(
+      ([key]) => !reservedEnvKeys.includes(key as (typeof reservedEnvKeys)[number]),
+    )
+    const otherEnvText = otherEnvEntries
+      .map(([key, value]) => `${key}=${value}`)
+      .join('\n')
+
+    const handleCopySecret = async (key: keyof typeof secretEnv) => {
+      const value = secretEnv[key]
+      if (!value) {
+        toast.error('秘钥尚未生成，请先启动 OneAPI。')
+        return
+      }
+
+      try {
+        await navigator.clipboard.writeText(value)
+        toast.success(`${String(key)} 已复制到剪贴板。`)
+      } catch {
+        toast.error('复制失败，请手动复制。')
+      }
+    }
+
+    const handleApplyAndRestart = async () => {
+      if (saving) return
+
+      setApplyingRestart(true)
+      try {
+        await Promise.resolve(onSave() as any)
+
+        const result = await window.api.restartOneApi()
+        if (!result || !result.success) {
+          toast.error(result?.error ?? '应用并重启 OneAPI 失败，请稍后重试。')
+        } else {
+          toast.success('OneAPI 设置已应用并重启。')
+        }
+      } catch {
+        toast.error('应用并重启 OneAPI 失败，请稍后重试。')
+      } finally {
+        setApplyingRestart(false)
+      }
+    }
+
+    return (
+      <Card className="border-none bg-transparent shadow-none">
+        <CardHeader className="px-0">
+          <CardTitle>{titleMap[moduleKey]}</CardTitle>
+          <CardDescription>配置 OneAPI 的端口、日志和数据库等参数。</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 px-0">
+          <Field label="启用 OneAPI 模块" description="关闭后将不在控制台中展示和管理 OneAPI 模块。">
+            <Switch checked={moduleSettings.enabled} onCheckedChange={handleEnabledChange} />
+          </Field>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="服务端口" description="OneAPI 容器映射到本机的端口号。">
+              <Input
+                placeholder="3000"
+                className="font-mono text-xs"
+                value={moduleSettings.port ? String(moduleSettings.port) : ''}
+                onChange={(e) => handlePortChange(e.target.value)}
+              />
+            </Field>
+            <Field label="OneAPI API 地址" description="基于 localhost 与端口推导，仅作为访问参考。">
+              <div className="text-xs font-mono text-slate-700 dark:text-slate-200 break-all">
+                {apiUrl || '请先配置服务端口'}
+              </div>
+            </Field>
+          </div>
+
+          <Field label="日志等级" description="控制是否启用 OneAPI 的调试日志（DEBUG / DEBUG_SQL）。">
+            <div className="flex flex-col gap-2 text-xs text-slate-600 dark:text-slate-200">
+              <label className="flex items-center gap-3">
+                <Switch
+                  checked={debugEnabled}
+                  onCheckedChange={(checked) => handleDebugToggle('DEBUG', checked)}
+                />
+                <span>启用 DEBUG 日志（DEBUG）</span>
+              </label>
+              <label className="flex items-center gap-3">
+                <Switch
+                  checked={debugSqlEnabled}
+                  onCheckedChange={(checked) => handleDebugToggle('DEBUG_SQL', checked)}
+                />
+                <span>启用 SQL 调试日志（DEBUG_SQL）</span>
+              </label>
+            </div>
+          </Field>
+
+          <Field
+            label="数据库模式（开发中）"
+            description="选择使用内置托管 MySQL + Redis 或外部数据库与 Redis。"
+          >
+            <select
+              className="h-9 w-full rounded-lg border border-slate-200/80 bg-white/90 px-3 text-sm text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              value={dbMode}
+              onChange={(e) => handleDbModeChange(e.target.value)}
+            >
+              <option value="managed">内置托管 MySQL + Redis（推荐）</option>
+              <option value="external">外部 MySQL / Redis</option>
+            </select>
+          </Field>
+
+          {dbMode === 'external' && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="外部数据库 SQL_DSN" description="例如 root:123456@tcp(localhost:3306)/oneapi。">
+                <Input
+                  placeholder="root:123456@tcp(localhost:3306)/oneapi"
+                  className="font-mono text-xs"
+                  value={envMap.SQL_DSN || ''}
+                  onChange={(e) => handleExternalDbFieldChange('sqlDsn', e.target.value)}
+                />
+              </Field>
+              <Field label="外部 Redis 连接串" description="例如 redis://localhost:6379。">
+                <Input
+                  placeholder="redis://localhost:6379"
+                  className="font-mono text-xs"
+                  value={envMap.REDIS_CONN_STRING || ''}
+                  onChange={(e) => handleExternalDbFieldChange('redis', e.target.value)}
+                />
+              </Field>
+            </div>
+          )}
+
+          <Field label="环境变量" description="一行一个，支持 KEY=VALUE 格式（不含上方已经配置的字段）。">
+            <textarea
+              rows={4}
+              className="w-full rounded-lg border border-slate-200/80 bg-white/90 px-3 py-2 text-xs font-mono text-slate-900 shadow-sm outline-none placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-0"
+              placeholder="OPENAI_API_KEY=sk-...&#10;HTTP_PROXY=http://127.0.0.1:7890"
+              value={otherEnvText}
+              onChange={(e) => handleEnvTextChange(e.target.value)}
+            />
+          </Field>
+
+          <Field label="安全秘钥" description="首次启动 OneAPI 时自动生成，用于会话加密等，暂不支持在此修改。">
+            <div className="space-y-3 text-xs">
+              {(
+                [
+                  {
+                    key: 'SESSION_SECRET' as const,
+                    label: '会话秘钥 SESSION_SECRET',
+                  },
+                ]
+              ).map((item) => {
+                const value = secretEnv[item.key]
+                const visible = visibleSecretKey === item.key
+                const masked = value ? '•'.repeat(value.length) : ''
+                return (
+                  <div key={item.key} className="space-y-1">
+                    <div className="text-[11px] text-slate-500 dark:text-slate-300">
+                      {item.label}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-1.5 font-mono text-[11px] text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        {value
+                          ? visible
+                            ? value
+                            : masked
+                          : '尚未生成（启动 OneAPI 后将自动生成）'}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={() => handleCopySecret(item.key)}
+                      >
+                        复制
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={() => setVisibleSecretKey(visible ? null : item.key)}
+                      >
+                        {visible ? '隐藏' : '显示'}
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </Field>
+
+          <div className="flex gap-2 pt-2">
+            <Button shine disabled={saving || applyingRestart} onClick={onSave}>
+              保存 OneAPI 设置
             </Button>
             <Button
               variant="outline"

@@ -555,6 +555,42 @@ function ensureN8nSecretsInSettings() {
   } catch {}
 }
 
+function ensureOneApiSecretsInSettings() {
+  try {
+    if (!appSettings || !appSettings.modules || !appSettings.modules.oneapi) return
+
+    const moduleSettings = appSettings.modules.oneapi
+    const currentEnv = moduleSettings.env || {}
+    const nextEnv = { ...currentEnv }
+    let changed = false
+
+    const ensureSecret = (key, length) => {
+      const value = nextEnv[key]
+      if (!value || typeof value !== 'string' || !value.trim()) {
+        nextEnv[key] = generateRandomPassword(length)
+        changed = true
+      }
+    }
+
+    ensureSecret('SESSION_SECRET', 48)
+
+    if (!changed) return
+
+    appSettings = {
+      ...appSettings,
+      modules: {
+        ...appSettings.modules,
+        oneapi: {
+          ...moduleSettings,
+          env: nextEnv,
+        },
+      },
+    }
+
+    saveSettingsToDisk(appSettings)
+  } catch {}
+}
+
 function splitImageName(image) {
   const trimmed = (image || '').trim()
   if (!trimmed) {
@@ -1966,6 +2002,8 @@ async function ensureOneApiRuntime() {
     console.log('[oneapi] ensureOneApiRuntime: start')
   }
 
+  ensureOneApiSecretsInSettings()
+
   const dbResult = await ensureOneApiMysql()
   if (!dbResult || !dbResult.success) {
     if (isVerboseLoggingEnabled()) {
@@ -2624,6 +2662,53 @@ export function setupIpcHandlers() {
       return {
         success: false,
         error: (runtimeResult && runtimeResult.error) || '重启 n8n 运行环境失败。',
+      }
+    }
+
+    return { success: true }
+  })
+
+  ipcMain.handle('oneapi:restart', async () => {
+    const dockerStatus = await detectDockerStatus()
+    if (!dockerStatus.installed || !dockerStatus.running) {
+      return {
+        success: false,
+        error: dockerStatus.error || 'Docker 未安装或未运行，无法重启 OneAPI 模块。',
+      }
+    }
+
+    try {
+      const docker = getDockerClient()
+      const config = moduleDockerConfig.oneapi
+      const containers = await docker.listContainers({
+        all: true,
+        filters: {
+          name: config.containerNames,
+        },
+      })
+
+      for (const info of containers) {
+        const container = docker.getContainer(info.Id)
+        const state = String(info.State || '').toLowerCase()
+        if (state === 'running' || state === 'restarting') {
+          await container.stop()
+        }
+        await container.remove({ force: true })
+      }
+    } catch (error) {
+      const message =
+        (error && error.message) || (typeof error === 'string' ? error : '重启前清理旧 OneAPI 容器失败')
+      return {
+        success: false,
+        error: `重启前清理旧 OneAPI 容器失败：${message}`,
+      }
+    }
+
+    const runtimeResult = await ensureOneApiRuntime()
+    if (!runtimeResult || !runtimeResult.success) {
+      return {
+        success: false,
+        error: (runtimeResult && runtimeResult.error) || '重启 OneAPI 运行环境失败。',
       }
     }
 

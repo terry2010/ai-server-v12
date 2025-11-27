@@ -35,6 +35,9 @@ const api = {
   restartN8n: () =>
     ipcRenderer.invoke('n8n:restart', {}),
 
+  restartOneApi: () =>
+    ipcRenderer.invoke('oneapi:restart', {}),
+
   getLogs: (params = {}) =>
     ipcRenderer.invoke('logs:list', {
       module: params.module ?? 'all',

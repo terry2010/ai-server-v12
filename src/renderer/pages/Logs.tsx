@@ -1,20 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Download, Filter, RefreshCcw, Trash2 } from 'lucide-react'
-import { GlassCard } from '@/components/GlassCard'
-import { Button } from '@/components/ui/button'
-import { StatusDot } from '@/components/StatusDot'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-  PaginationEllipsis,
-} from '@/components/ui/pagination'
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
+import { LogsFilterBar } from './logs/LogsFilterBar'
+import { LogsTable } from './logs/LogsTable'
+import { LogsPaginationBar } from './logs/LogsPaginationBar'
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug'
 
@@ -238,13 +226,6 @@ const mockLogs: LogItem[] = [
   },
 ]
 
-const levelColors: Record<LogLevel, string> = {
-  error: 'bg-red-500 text-white',
-  warn: 'bg-amber-400 text-slate-900',
-  info: 'bg-sky-500 text-white',
-  debug: 'bg-slate-600 text-slate-50',
-}
-
 export function LogsPage() {
   const [searchParams] = useSearchParams()
   const [moduleFilter, setModuleFilter] = useState<'all' | LogItem['module']>('all')
@@ -441,295 +422,40 @@ export function LogsPage() {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">系统日志</h2>
-          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700 dark:bg-slate-900/70 dark:text-slate-300">
-            <StatusDot status={isAutoRefresh ? 'running' : 'stopped'} />
-            <span>{isAutoRefresh ? '实时' : '已暂停'}</span>
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1 rounded-xl bg-white/90 px-2 py-1 text-slate-700 shadow-sm dark:bg-slate-900/70 dark:text-slate-100">
-            <Filter className="mr-1 h-3 w-3 text-slate-500 dark:text-slate-400" />
-            <Select
-              value={moduleFilter}
-              onValueChange={(v) => {
-                setModuleFilter(v as any)
-              }}
-            >
-              <SelectTrigger className="h-8 w-28">
-                {moduleFilter === 'all'
-                  ? '选择模块'
-                  : moduleFilter === 'client'
-                  ? 'client'
-                  : moduleFilter === 'n8n'
-                  ? 'n8n'
-                  : moduleFilter === 'dify'
-                  ? 'Dify'
-                  : moduleFilter === 'oneapi'
-                  ? 'OneAPI'
-                  : 'RagFlow'}
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部</SelectItem>
-                <SelectItem value="client">client</SelectItem>
-                <SelectItem value="n8n">n8n</SelectItem>
-                <SelectItem value="dify">Dify</SelectItem>
-                <SelectItem value="oneapi">OneAPI</SelectItem>
-                <SelectItem value="ragflow">RagFlow</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select
-              value={levelFilter}
-              onValueChange={(v) => {
-                setLevelFilter(v as LogLevel | 'all')
-              }}
-            >
-              <SelectTrigger className="h-8 w-28">
-                {levelFilter === 'all' ? '选择日志级别' : levelFilter}
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部</SelectItem>
-                <SelectItem value="error">error</SelectItem>
-                <SelectItem value="warn">warn</SelectItem>
-                <SelectItem value="info">info</SelectItem>
-                <SelectItem value="debug">debug</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-1 rounded-xl bg-white/90 px-2 py-1 text-slate-700 shadow-sm dark:bg-slate-900/70 dark:text-slate-100">
-            <span className="text-[10px] text-slate-500 dark:text-slate-400">时间范围</span>
-            <Select
-              value={timeRange}
-              onValueChange={(v) => {
-                setTimeRange(v as any)
-              }}
-            >
-              <SelectTrigger className="h-8 w-40 text-[10px]">
-                {timeRange === 'all'
-                  ? '全部'
-                  : timeRange === '5m'
-                  ? '最近 5 分钟'
-                  : timeRange === '30m'
-                  ? '最近 30 分钟'
-                  : timeRange === '1h'
-                  ? '最近 1 小时'
-                  : '最近 24 小时'}
-              </SelectTrigger>
-              <SelectContent className="min-w-[160px]">
-                <SelectItem value="all">全部</SelectItem>
-                <SelectItem value="5m">最近 5 分钟</SelectItem>
-                <SelectItem value="30m">最近 30 分钟</SelectItem>
-                <SelectItem value="1h">最近 1 小时</SelectItem>
-                <SelectItem value="24h">最近 24 小时</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            shine
-            className="text-[11px] disabled:opacity-60 disabled:cursor-not-allowed"
-            onClick={() => {
-              setIsAutoRefresh((prev) => {
-                const next = !prev
-                if (!prev && next) {
-                  setPage(1)
-                  setReloadKey((key) => key + 1)
-                }
-                return next
-              })
-            }}
-            disabled={loading}
-          >
-            <RefreshCcw className={`mr-1 h-3 w-3 ${isAutoRefresh && !loading ? 'animate-spin' : ''}`} />
-            {isAutoRefresh ? '停止刷新' : '开始刷新'}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            shine
-            className="text-[11px]"
-            onClick={handleExport}
-            disabled={exporting}
-          >
-            <Download className="mr-1 h-3 w-3" /> {exporting ? '导出中…' : '导出日志'}
-          </Button>
-          <Button size="sm" variant="destructive" shine className="text-[11px]" onClick={handleClear}>
-            <Trash2 className="mr-1 h-3 w-3" /> 清空
-          </Button>
-        </div>
-      </div>
+      <LogsFilterBar
+        moduleFilter={moduleFilter}
+        levelFilter={levelFilter}
+        timeRange={timeRange}
+        isAutoRefresh={isAutoRefresh}
+        loading={loading}
+        exporting={exporting}
+        onModuleFilterChange={(v) => setModuleFilter(v)}
+        onLevelFilterChange={(v) => setLevelFilter(v)}
+        onTimeRangeChange={(v) => setTimeRange(v)}
+        onToggleAutoRefresh={() => {
+          setIsAutoRefresh((prev) => {
+            const next = !prev
+            if (!prev && next) {
+              setPage(1)
+              setReloadKey((key) => key + 1)
+            }
+            return next
+          })
+        }}
+        onExport={handleExport}
+        onClear={handleClear}
+      />
 
-      <GlassCard className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-0 text-slate-800 dark:border-white/20 dark:bg-slate-950/80">
-        <div className="font-mono text-[11px] text-slate-800 dark:text-slate-100">
-          <Table className="min-w-full">
-            <TableHeader className="sticky top-0 z-10 border-b border-slate-200 bg-slate-100/95 backdrop-blur-sm dark:border-slate-800/80 dark:bg-slate-900/95">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[110px]">时间</TableHead>
-                <TableHead className="w-[70px]">级别</TableHead>
-                <TableHead className="w-[170px] whitespace-nowrap">模块 / 服务</TableHead>
-                <TableHead>消息</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((log) => {
-                const [datePart, timePart] = log.timestamp.split(' ')
-                return (
-                  <TableRow key={log.id}>
-                    <TableCell className="tabular-nums text-slate-800 dark:text-slate-100">
-                      <div className="flex flex-col leading-tight">
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500">{datePart}</span>
-                        <span className="text-xs font-medium text-slate-800 dark:text-slate-100">{timePart}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={`inline-flex items-center rounded-full px-1 py-px text-[8px] font-semibold ${levelColors[log.level]}`}
-                      >
-                        {log.level.toUpperCase()}
-                      </span>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-slate-700 dark:text-slate-300">
-                      <div className="flex flex-col leading-tight">
-                        <span>{log.module}</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400">{log.service}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100">
-                      {log.message}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-              {total === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="py-6 text-center text-slate-500">
-                    当前筛选条件下暂无日志。
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </GlassCard>
+      <LogsTable items={items} total={total} />
 
-      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-        <span>
-          共 {total} 条 · 每页 {pageSize} 条 · 第 {page} / {totalPages} 页
-        </span>
-        <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-1 text-[10px] text-slate-500 sm:flex dark:text-slate-400 whitespace-nowrap">
-            <span className="whitespace-nowrap">每页</span>
-            <Select
-              value={String(pageSize)}
-              onValueChange={(v) => {
-                const raw = Number(v) || 20
-                const next = Math.min(100, Math.max(3, raw))
-                setPageSize(next)
-              }}
-            >
-              <SelectTrigger className="h-8 w-14">
-                {pageSize}
-              </SelectTrigger>
-              <SelectContent side="top">
-                <SelectItem value="3">3</SelectItem>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="20">20</SelectItem>
-                <SelectItem value="50">50</SelectItem>
-                <SelectItem value="100">100</SelectItem>
-              </SelectContent>
-            </Select>
-            <span>条</span>
-          </div>
-          <Pagination className="w-auto">
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  href="#"
-                  aria-disabled={page === 1}
-                  className={page === 1 ? 'pointer-events-none opacity-50' : ''}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    if (page > 1) setPage(page - 1)
-                  }}
-                />
-              </PaginationItem>
-
-              {(() => {
-                const items = [] as JSX.Element[]
-                const maxButtons = 7
-
-                const renderPage = (p: number) => (
-                  <PaginationItem key={p}>
-                    <PaginationLink
-                      href="#"
-                      isActive={p === page}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setPage(p)
-                      }}
-                    >
-                      {p}
-                    </PaginationLink>
-                  </PaginationItem>
-                )
-
-                if (totalPages <= maxButtons) {
-                  for (let p = 1; p <= totalPages; p++) {
-                    items.push(renderPage(p))
-                  }
-                } else {
-                  const showLeftEllipsis = page > 4
-                  const showRightEllipsis = page < totalPages - 3
-
-                  items.push(renderPage(1))
-
-                  if (showLeftEllipsis) {
-                    items.push(
-                      <PaginationItem key="left-ellipsis">
-                        <PaginationEllipsis />
-                      </PaginationItem>,
-                    )
-                  }
-
-                  const start = showLeftEllipsis ? page - 1 : 2
-                  const end = showRightEllipsis ? page + 1 : totalPages - 1
-
-                  for (let p = start; p <= end; p++) {
-                    items.push(renderPage(p))
-                  }
-
-                  if (showRightEllipsis) {
-                    items.push(
-                      <PaginationItem key="right-ellipsis">
-                        <PaginationEllipsis />
-                      </PaginationItem>,
-                    )
-                  }
-
-                  items.push(renderPage(totalPages))
-                }
-
-                return items
-              })()}
-
-              <PaginationItem>
-                <PaginationNext
-                  href="#"
-                  aria-disabled={page === totalPages}
-                  className={page === totalPages ? 'pointer-events-none opacity-50' : ''}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    if (page < totalPages) setPage(page + 1)
-                  }}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
-      </div>
+      <LogsPaginationBar
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        totalPages={totalPages}
+        onPageChange={(p) => setPage(p)}
+        onPageSizeChange={(size) => setPageSize(size)}
+      />
     </div>
   )
 }

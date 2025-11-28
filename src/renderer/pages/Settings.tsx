@@ -962,6 +962,169 @@ function ModuleSettings({ moduleKey, settings, loading, saving, onChange, onSave
     )
   }
 
+  if (moduleKey === 'dify') {
+    const envMap = moduleSettings.env || {}
+
+    const reservedEnvKeys = [
+      'DB_DATABASE_URL',
+      'DB_USERNAME',
+      'DB_PASSWORD',
+      'DB_HOST',
+      'DB_PORT',
+      'DB_DATABASE',
+      'REDIS_HOST',
+      'REDIS_PORT',
+      'REDIS_PASSWORD',
+    ] as const
+
+    const otherEnvEntries = Object.entries(envMap).filter(
+      ([key]) => !reservedEnvKeys.includes(key as (typeof reservedEnvKeys)[number]),
+    )
+    const otherEnvText = otherEnvEntries
+      .map(([key, value]) => `${key}=${value}`)
+      .join('\n')
+
+    const port = moduleSettings.port || 0
+    const consoleUrl = port > 0 ? `http://localhost:${port}` : ''
+
+    const setEnv = (nextEnv: Record<string, string>) => {
+      updateModule({ env: nextEnv })
+    }
+
+    const handleEnvTextChange = (value: string) => {
+      const lines = value.split('\n')
+      const parsed: Record<string, string> = {}
+      for (const raw of lines) {
+        const line = raw.trim()
+        if (!line) continue
+        const index = line.indexOf('=')
+        if (index <= 0) continue
+        const key = line.slice(0, index).trim()
+        const val = line.slice(index + 1)
+        if (!key) continue
+        if (reservedEnvKeys.includes(key as (typeof reservedEnvKeys)[number])) continue
+        parsed[key] = val
+      }
+
+      const current = moduleSettings.env || {}
+      const reservedSet = new Set(reservedEnvKeys)
+      const nextEnv: Record<string, string> = {}
+
+      for (const [key, val] of Object.entries(current)) {
+        if (reservedSet.has(key as (typeof reservedEnvKeys)[number])) {
+          nextEnv[key] = val as string
+        }
+      }
+
+      for (const [key, val] of Object.entries(parsed)) {
+        if (!reservedSet.has(key as (typeof reservedEnvKeys)[number])) {
+          nextEnv[key] = val
+        }
+      }
+
+      setEnv(nextEnv)
+    }
+
+    const handleEnabledChange = async (checked: boolean) => {
+      if (!checked) {
+        try {
+          const modules = await window.api.listModules()
+          const target = modules.find((m) => m.id === 'dify')
+          if (target && (target.status === 'running' || target.status === 'starting')) {
+            toast.warning('Dify 模块正在运行，无法禁用。请先在首页停止服务后再尝试禁用。')
+            updateModule({ enabled: true })
+            return
+          }
+        } catch {
+          toast.error('检查 Dify 运行状态失败，暂时无法禁用。')
+          updateModule({ enabled: true })
+          return
+        }
+      }
+
+      updateModule({ enabled: checked })
+    }
+
+    const handlePortChange = (value: string) => {
+      const num = Number(value)
+      const portValue = Number.isFinite(num) && num > 0 ? num : 0
+      updateModule({ port: portValue })
+    }
+
+    const handleApplyAndRestart = async () => {
+      if (saving) return
+
+      setApplyingRestart(true)
+      try {
+        await Promise.resolve(onSave() as any)
+
+        const result = await window.api.restartDify()
+        if (!result || !result.success) {
+          toast.error(result?.error ?? '应用并重启 Dify 失败，请稍后重试。')
+        } else {
+          toast.success('Dify 设置已应用并重启。')
+        }
+      } catch {
+        toast.error('应用并重启 Dify 失败，请稍后重试。')
+      } finally {
+        setApplyingRestart(false)
+      }
+    }
+
+    return (
+      <Card className="border-none bg-transparent shadow-none">
+        <CardHeader className="px-0">
+          <CardTitle>{titleMap[moduleKey]}</CardTitle>
+          <CardDescription>配置 Dify 的端口、环境变量等参数（数据库与 Redis 复用现有实例）。</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 px-0">
+          <Field label="启用 Dify 模块" description="关闭后将不在控制台中展示和管理 Dify 模块。">
+            <Switch checked={moduleSettings.enabled} onCheckedChange={handleEnabledChange} />
+          </Field>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="服务端口" description="Dify Web 映射到本机的端口号。">
+              <Input
+                placeholder="80"
+                className="font-mono text-xs"
+                value={moduleSettings.port ? String(moduleSettings.port) : ''}
+                onChange={(e) => handlePortChange(e.target.value)}
+              />
+            </Field>
+            <Field label="Dify 控制台 URL" description="基于 localhost 与端口推导，仅作为访问参考。">
+              <div className="text-xs font-mono text-slate-700 dark:text-slate-200 break-all">
+                {consoleUrl || '请先配置服务端口'}
+              </div>
+            </Field>
+          </div>
+
+          <Field label="环境变量" description="一行一个，支持 KEY=VALUE 格式（不含数据库与 Redis 连接字段）。">
+            <textarea
+              rows={4}
+              className="w-full rounded-lg border border-slate-200/80 bg-white/90 px-3 py-2 text-xs font-mono text-slate-900 shadow-sm outline-none placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-0"
+              placeholder="FILES_URL=http://localhost:5001\nVECTOR_STORE=weaviate"
+              value={otherEnvText}
+              onChange={(e) => handleEnvTextChange(e.target.value)}
+            />
+          </Field>
+
+          <div className="flex gap-2 pt-2">
+            <Button shine disabled={saving || applyingRestart} onClick={onSave}>
+              保存 Dify 设置
+            </Button>
+            <Button
+              variant="outline"
+              disabled={saving || applyingRestart}
+              onClick={handleApplyAndRestart}
+            >
+              {applyingRestart ? '应用中…' : '应用并重启'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   if (moduleKey === 'oneapi') {
     const envMap = moduleSettings.env || {}
     const secretEnv = {
@@ -1329,7 +1492,7 @@ function ModuleSettings({ moduleKey, settings, loading, saving, onChange, onSave
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="服务端口" description="容器映射到本机的端口号。">
             <Input
-              placeholder={moduleKey === 'dify' ? '8081' : moduleKey === 'oneapi' ? '3000' : '9500'}
+              placeholder={moduleKey === 'ragflow' ? '9500' : '8080'}
               className="font-mono text-xs"
               value={moduleSettings.port ? String(moduleSettings.port) : ''}
               onChange={(e) => handleGenericPortChange(e.target.value)}

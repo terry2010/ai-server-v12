@@ -21,6 +21,7 @@ export interface WindowApi {
   stopModule(moduleId: ModuleId): Promise<{ success: boolean; error?: string }>
   restartN8n(): Promise<{ success: boolean; error?: string }>
   restartOneApi(): Promise<{ success: boolean; error?: string }>
+  restartDify(): Promise<{ success: boolean; error?: string }>
   getLogs(params: {
     module?: LogModule | 'all'
     level?: LogLevel | 'all'

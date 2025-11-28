@@ -245,7 +245,7 @@ let logsClearSinceUnix = 0
 /** @type {Record<import('../shared/types').ModuleId, { containerNames: string[] }>}*/
 const moduleDockerConfig = {
   n8n: { containerNames: ['ai-server-n8n', 'n8n'] },
-  dify: { containerNames: ['ai-server-dify', 'dify'] },
+  dify: { containerNames: ['ai-server-dify-api', 'ai-server-dify-web', 'ai-server-dify', 'dify'] },
   oneapi: { containerNames: ['ai-server-oneapi', 'oneapi'] },
   ragflow: { containerNames: ['ai-server-ragflow', 'ragflow'] },
 }
@@ -253,6 +253,8 @@ const moduleDockerConfig = {
 const moduleImageMap = {
   n8n: 'docker.n8n.io/n8nio/n8n',
   oneapi: 'docker.io/justsong/one-api:latest',
+  difyApi: 'docker.io/langgenius/dify-api:1.7.2',
+  difyWeb: 'docker.io/langgenius/dify-web:1.7.2',
 }
 
 const MANAGED_NETWORK_NAME = 'ai-server-net'
@@ -264,6 +266,7 @@ const MYSQL_DB_IMAGE = 'mysql:8.2.0'
 const MYSQL_DB_CONTAINER_NAME = 'ai-server-mysql'
 const MYSQL_DB_VOLUME_NAME = 'ai-server-mysql-data'
 const ONEAPI_DATA_VOLUME_NAME = 'ai-server-oneapi-data'
+const DIFY_DATA_VOLUME_NAME = 'ai-server-dify-data'
 const REDIS_IMAGE = 'redis:latest'
 const REDIS_CONTAINER_NAME = 'ai-server-redis'
 const REDIS_DATA_VOLUME_NAME = 'ai-server-redis-data'
@@ -303,6 +306,7 @@ function applyHostTimeZoneToEnv(env) {
 const moduleBaseServiceContainers = {
   n8n: [N8N_DB_CONTAINER_NAME],
   oneapi: [MYSQL_DB_CONTAINER_NAME, REDIS_CONTAINER_NAME],
+  dify: [N8N_DB_CONTAINER_NAME, REDIS_CONTAINER_NAME],
 }
 
 async function maybeStopBaseServicesForModule(moduleId, docker) {
@@ -408,7 +412,7 @@ const defaultAppSettings = {
     },
     dify: {
       enabled: true,
-      port: 8081,
+      port: 80,
       databaseUrl: '',
       env: {},
     },
@@ -467,20 +471,21 @@ function saveSettingsToDisk(settings) {
 }
 
 function mergeAppSettings(base, patch) {
+  const safePatch = patch || {}
   return {
     ...base,
-    ...(patch ?? {}),
+    ...safePatch,
     docker: {
       ...base.docker,
-      ...(patch?.docker ?? {}),
+      ...(safePatch.docker || {}),
     },
     debug: {
       ...base.debug,
-      ...(patch?.debug ?? {}),
+      ...(safePatch.debug || {}),
     },
     modules: {
       ...base.modules,
-      ...(patch?.modules ?? {}),
+      ...(safePatch.modules || {}),
     },
   }
 }
@@ -1402,7 +1407,266 @@ async function ensureN8nRuntime() {
   }
 
   if (isVerboseLoggingEnabled()) {
-    console.log('[n8n] ensureN8nRuntime: n8n 容器已就绪')
+    console.log('[n8n] ensureN8nRuntime: n8n 容器已就绪', {
+      hostPort,
+    })
+  }
+
+  return { success: true }
+}
+
+async function ensureDifyRuntime() {
+  if (isVerboseLoggingEnabled()) {
+    console.log('[dify] ensureDifyRuntime: start')
+  }
+
+  const docker = getDockerClient()
+
+  const pgResult = await ensureN8nPostgres()
+  if (!pgResult || !pgResult.success || !pgResult.dbConfig) {
+    if (isVerboseLoggingEnabled()) {
+      console.error('[dify] ensureDifyRuntime: Postgres 准备失败', pgResult && pgResult.error)
+    }
+    return {
+      success: false,
+      error: (pgResult && pgResult.error) || '启动 Dify 依赖的数据库失败。',
+    }
+  }
+
+  const redisResult = await ensureOneApiRedis()
+  if (!redisResult || !redisResult.success || !redisResult.redisConfig) {
+    if (isVerboseLoggingEnabled()) {
+      console.error('[dify] ensureDifyRuntime: Redis 准备失败', redisResult && redisResult.error)
+    }
+    return {
+      success: false,
+      error: (redisResult && redisResult.error) || '启动 Dify 依赖的 Redis 失败。',
+    }
+  }
+
+  const moduleSettings =
+    appSettings && appSettings.modules && appSettings.modules.dify
+      ? appSettings.modules.dify
+      : defaultAppSettings.modules.dify
+
+  const basePort = moduleSettings.port || defaultAppSettings.modules.dify.port
+
+  const envFromSettings = (moduleSettings && moduleSettings.env) || {}
+
+  const dbUrl = moduleSettings.databaseUrl || ''
+
+  const sharedDb = pgResult.dbConfig
+  const dbHost = envFromSettings.DB_HOST || sharedDb.host || N8N_DB_CONTAINER_NAME
+  const dbPort = envFromSettings.DB_PORT || String(sharedDb.port || 5432)
+  const dbUser = envFromSettings.DB_USERNAME || sharedDb.user || 'postgres'
+  const dbPassword = envFromSettings.DB_PASSWORD || sharedDb.password || ''
+  const dbName =
+    envFromSettings.DB_DATABASE || (sharedDb && sharedDb.database ? sharedDb.database : 'dify')
+
+  const sharedRedis = redisResult.redisConfig
+  const redisHost = envFromSettings.REDIS_HOST || sharedRedis.host || REDIS_CONTAINER_NAME
+  const redisPort = envFromSettings.REDIS_PORT || String(sharedRedis.port || 6379)
+  const redisPassword = envFromSettings.REDIS_PASSWORD || ''
+
+  const sharedEnv = []
+
+  if (dbUrl) {
+    sharedEnv.push(`DB_DATABASE_URL=${dbUrl}`)
+  } else {
+    sharedEnv.push(`DB_USERNAME=${dbUser}`)
+    sharedEnv.push(`DB_PASSWORD=${dbPassword}`)
+    sharedEnv.push(`DB_HOST=${dbHost}`)
+    sharedEnv.push(`DB_PORT=${dbPort}`)
+    sharedEnv.push(`DB_DATABASE=${dbName}`)
+  }
+
+  sharedEnv.push(`REDIS_HOST=${redisHost}`)
+  sharedEnv.push(`REDIS_PORT=${redisPort}`)
+  if (redisPassword) {
+    sharedEnv.push(`REDIS_PASSWORD=${redisPassword}`)
+  }
+
+  // 确保启动时自动执行数据库迁移，创建 dify_setups 等表
+  sharedEnv.push('MIGRATION_ENABLED=true')
+
+  sharedEnv.push('STORAGE_TYPE=opendal')
+  sharedEnv.push('OPENDAL_SCHEME=fs')
+  sharedEnv.push('OPENDAL_FS_ROOT=storage')
+
+  sharedEnv.push('WEB_API_CORS_ALLOW_ORIGINS=*')
+  sharedEnv.push('CONSOLE_CORS_ALLOW_ORIGINS=*')
+
+  for (const [key, value] of Object.entries(envFromSettings)) {
+    if (typeof value !== 'string') continue
+    if (
+      key === 'DB_DATABASE_URL' ||
+      key === 'DB_USERNAME' ||
+      key === 'DB_PASSWORD' ||
+      key === 'DB_HOST' ||
+      key === 'DB_PORT' ||
+      key === 'DB_DATABASE' ||
+      key === 'REDIS_HOST' ||
+      key === 'REDIS_PORT' ||
+      key === 'REDIS_PASSWORD'
+    ) {
+      continue
+    }
+    sharedEnv.push(`${key}=${value}`)
+  }
+
+  applyHostTimeZoneToEnv(sharedEnv)
+
+  const apiContainerName = 'ai-server-dify-api'
+  const webContainerName = 'ai-server-dify-web'
+
+  const ensureService = async (serviceName, imageKey, extraEnv, hostPort, containerPort) => {
+    let info = null
+    try {
+      const list = await docker.listContainers({
+        all: true,
+        filters: {
+          name: [serviceName],
+        },
+      })
+      if (Array.isArray(list) && list.length > 0) {
+        info = list[0]
+      }
+    } catch {
+      info = null
+    }
+
+    const exposedPortKey = `${containerPort}/tcp`
+
+    if (info) {
+      const container = docker.getContainer(info.Id)
+      try {
+        await ensureNetworkExists()
+        const network = docker.getNetwork(MANAGED_NETWORK_NAME)
+        await network.connect({ Container: info.Id }).catch(() => undefined)
+      } catch {}
+
+      const state = String(info.State || '').toLowerCase()
+      if (state !== 'running') {
+        try {
+          await container.start()
+        } catch (error) {
+          const message = error && error.message ? error.message : String(error)
+          return {
+            success: false,
+            error: `启动 ${serviceName} 容器失败：${message}`,
+          }
+        }
+      }
+
+      return { success: true }
+    }
+
+    const image = moduleImageMap[imageKey]
+    const imageEnsure = await ensureImagePresent(image)
+    if (!imageEnsure.ok) {
+      return imageEnsure.errorResult
+    }
+
+    try {
+      await ensureNetworkExists()
+
+      /** @type {string[]} */
+      const binds = []
+      if (serviceName === apiContainerName) {
+        await ensureVolumeExists(DIFY_DATA_VOLUME_NAME)
+        binds.push(`${DIFY_DATA_VOLUME_NAME}:/app/api/storage`)
+      }
+
+      const imageRef = await resolveLocalImageReference(image)
+      const env = [...sharedEnv, ...extraEnv]
+      applyHostTimeZoneToEnv(env)
+
+      const container = await docker.createContainer({
+        name: serviceName,
+        Image: imageRef,
+        Env: env,
+        ExposedPorts: {
+          [exposedPortKey]: {},
+        },
+        HostConfig: {
+          RestartPolicy: {
+            Name: 'always',
+          },
+          PortBindings: {
+            [exposedPortKey]: [
+              {
+                HostPort: String(hostPort),
+              },
+            ],
+          },
+          ...(binds.length
+            ? {
+                Binds: binds,
+              }
+            : {}),
+        },
+        NetworkingConfig: {
+          EndpointsConfig: {
+            [MANAGED_NETWORK_NAME]: {
+              Aliases: [serviceName],
+            },
+          },
+        },
+      })
+
+      await container.start()
+      return { success: true }
+    } catch (error) {
+      const message = error && error.message ? error.message : String(error)
+      return {
+        success: false,
+        error: `创建 ${serviceName} 容器失败：${message}`,
+      }
+    }
+  }
+
+  const apiPort = 5001
+  const webPort = basePort
+
+  const apiResult = await ensureService(
+    apiContainerName,
+    'difyApi',
+    ['MODE=api'],
+    apiPort,
+    apiPort,
+  )
+  if (!apiResult || !apiResult.success) {
+    return apiResult
+  }
+
+  const webResult = await ensureService(
+    webContainerName,
+    'difyWeb',
+    [`CONSOLE_API_URL=http://localhost:${apiPort}`],
+    webPort,
+    3000,
+  )
+  if (!webResult || !webResult.success) {
+    return webResult
+  }
+
+  try {
+    await waitForOneApiReady(webPort, 60000, 3000)
+  } catch (error) {
+    if (isVerboseLoggingEnabled()) {
+      console.error('[dify] ensureDifyRuntime: Web 就绪检查失败', error)
+    }
+    return {
+      success: false,
+      error: 'Dify Web 未在预期时间内就绪。',
+    }
+  }
+
+  if (isVerboseLoggingEnabled()) {
+    console.log('[dify] ensureDifyRuntime: Dify API/Web 已就绪', {
+      apiPort,
+      webPort,
+    })
   }
 
   return { success: true }
@@ -2328,15 +2592,15 @@ async function pullDockerImage(image) {
   /** @type {NodeJS.ProcessEnv} */
   const env = { ...process.env }
 
-  const proxy = appSettings?.docker?.proxy
-  const mode = proxy?.proxyMode ?? 'system'
+  const proxy = appSettings && appSettings.docker ? appSettings.docker.proxy : undefined
+  const mode = proxy && proxy.proxyMode ? proxy.proxyMode : 'system'
 
   if (mode === 'direct') {
     delete env.HTTP_PROXY
     delete env.HTTPS_PROXY
   } else if (mode === 'manual') {
-    const host = proxy?.proxyHost
-    const port = proxy?.proxyPort
+    const host = proxy && proxy.proxyHost
+    const port = proxy && proxy.proxyPort
     if (!host || !port) {
       return {
         success: false,
@@ -2535,7 +2799,7 @@ export function setupIpcHandlers() {
   })
 
   ipcMain.handle('modules:start', async (_event, payload) => {
-    const moduleId = payload?.moduleId
+    const moduleId = payload && typeof payload.moduleId !== 'undefined' ? payload.moduleId : undefined
     const config = moduleDockerConfig[moduleId]
     if (!moduleId || !config) {
       return { success: false, error: '模块不存在或未配置容器信息' }
@@ -2578,6 +2842,18 @@ export function setupIpcHandlers() {
       return { success: true }
     }
 
+    if (moduleId === 'dify') {
+      const runtimeResult = await ensureDifyRuntime()
+      if (!runtimeResult || !runtimeResult.success) {
+        return {
+          success: false,
+          error: (runtimeResult && runtimeResult.error) || '启动 Dify 运行环境失败。',
+        }
+      }
+
+      return { success: true }
+    }
+
     try {
       const docker = getDockerClient()
       const containers = await docker.listContainers({
@@ -2614,8 +2890,28 @@ export function setupIpcHandlers() {
     }
   })
 
+  ipcMain.handle('dify:restart', async () => {
+    const dockerStatus = await detectDockerStatus()
+    if (!dockerStatus.installed || !dockerStatus.running) {
+      return {
+        success: false,
+        error: dockerStatus.error || 'Docker 未安装或未运行，无法重启 Dify。',
+      }
+    }
+
+    const result = await ensureDifyRuntime()
+    if (!result || !result.success) {
+      return {
+        success: false,
+        error: (result && result.error) || '重启 Dify 运行环境失败。',
+      }
+    }
+
+    return { success: true }
+  })
+
   ipcMain.handle('modules:stop', async (_event, payload) => {
-    const moduleId = payload?.moduleId
+    const moduleId = payload && typeof payload.moduleId !== 'undefined' ? payload.moduleId : undefined
     const config = moduleDockerConfig[moduleId]
     if (!moduleId || !config) {
       return { success: false, error: '模块不存在或未配置容器信息' }
@@ -3023,12 +3319,15 @@ export function setupIpcHandlers() {
   }
 
   ipcMain.handle('logs:list', async (_event, payload) => {
-    const moduleFilter = payload?.module ?? 'all'
-    const levelFilter = payload?.level ?? 'all'
-    const page = payload?.page ?? 1
-    const pageSize = payload?.pageSize ?? 20
-    const startTime = payload?.startTime || ''
-    const endTime = payload?.endTime || ''
+    const moduleFilter =
+      payload && typeof payload.module !== 'undefined' ? payload.module : 'all'
+    const levelFilter =
+      payload && typeof payload.level !== 'undefined' ? payload.level : 'all'
+    const page = payload && typeof payload.page === 'number' ? payload.page : 1
+    const pageSize =
+      payload && typeof payload.pageSize === 'number' ? payload.pageSize : 20
+    const startTime = payload && payload.startTime ? payload.startTime : ''
+    const endTime = payload && payload.endTime ? payload.endTime : ''
 
     const all = await collectAllLogsForQuery(moduleFilter, levelFilter, startTime, endTime)
     const total = all.length
@@ -3039,10 +3338,12 @@ export function setupIpcHandlers() {
   })
 
   ipcMain.handle('logs:export', async (_event, payload) => {
-    const moduleFilter = payload?.module ?? 'all'
-    const levelFilter = payload?.level ?? 'all'
-    const startTime = payload?.startTime || ''
-    const endTime = payload?.endTime || ''
+    const moduleFilter =
+      payload && typeof payload.module !== 'undefined' ? payload.module : 'all'
+    const levelFilter =
+      payload && typeof payload.level !== 'undefined' ? payload.level : 'all'
+    const startTime = payload && payload.startTime ? payload.startTime : ''
+    const endTime = payload && payload.endTime ? payload.endTime : ''
 
     const all = await collectAllLogsForQuery(moduleFilter, levelFilter, startTime, endTime)
 
@@ -3061,7 +3362,7 @@ export function setupIpcHandlers() {
       const ss = pad(now.getSeconds())
       const defaultName = `logs-${yyyy}${MM}${dd}-${hh}${mm}${ss}.json`
 
-      let filename = payload?.filename || defaultName
+      let filename = payload && payload.filename ? payload.filename : defaultName
       if (!filename.toLowerCase().endsWith('.json')) {
         filename += '.json'
       }
@@ -3257,7 +3558,8 @@ export function setupIpcHandlers() {
   })
 
   ipcMain.handle('docker:pullImage', async (_event, payload) => {
-    return pullDockerImage(payload?.image)
+    const image = payload && typeof payload.image === 'string' ? payload.image : undefined
+    return pullDockerImage(image)
   })
 
   // Settings

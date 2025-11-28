@@ -38,6 +38,9 @@ const api = {
   restartOneApi: () =>
     ipcRenderer.invoke('oneapi:restart', {}),
 
+  restartDify: () =>
+    ipcRenderer.invoke('dify:restart', {}),
+
   getLogs: (params = {}) =>
     ipcRenderer.invoke('logs:list', {
       module: params.module ?? 'all',

@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import type { AppSettings } from '../../shared/types'
+import type { AppSettings, ModuleId, ModuleStatus } from '../../shared/types'
 
 const tabs = [
   { key: 'system', label: '系统设置', icon: SlidersHorizontal },
@@ -33,18 +33,37 @@ export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTabKey>('system')
   const [dangerOpen, setDangerOpen] = useState(false)
   const [dangerAction, setDangerAction] = useState<string | null>(null)
+  const [dangerLoading, setDangerLoading] = useState(false)
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [moduleStatusMap, setModuleStatusMap] = useState<Record<ModuleId, ModuleStatus> | null>(null)
 
   useEffect(() => {
     let cancelled = false
 
     const load = async () => {
       try {
-        const result = await window.api.getSettings()
+        const [result, modules] = await Promise.all([
+          window.api.getSettings(),
+          window.api.listModules().catch(() => null),
+        ])
         if (!cancelled) {
           setSettings(result)
+          if (modules && Array.isArray(modules)) {
+            const map: Record<ModuleId, ModuleStatus> = {
+              n8n: 'stopped',
+              dify: 'stopped',
+              oneapi: 'stopped',
+              ragflow: 'stopped',
+            }
+            for (const m of modules) {
+              if (m && m.id && m.status) {
+                map[m.id as ModuleId] = m.status as ModuleStatus
+              }
+            }
+            setModuleStatusMap(map)
+          }
           setLoading(false)
         }
       } catch (_err) {
@@ -96,6 +115,7 @@ export function SettingsPage() {
       return
     }
 
+    setDangerLoading(true)
     try {
       let result: { success: boolean; error?: string; exitCode?: number; stderrSnippet?: string } | null = null
       let successMessage = '操作已完成。'
@@ -115,15 +135,16 @@ export function SettingsPage() {
       }
 
       if (!result) {
-        window.alert('未知的调试操作。')
+        toast.error('未知的调试操作。')
       } else if (!result.success) {
-        window.alert(result.error ?? '执行调试操作失败，请检查 Docker 状态。')
+        toast.error(result.error ?? '执行调试操作失败，请检查 Docker 状态。')
       } else {
-        window.alert(successMessage)
+        toast.success(successMessage)
       }
     } catch (_err) {
-      window.alert('执行调试操作失败，请检查 Docker 状态。')
+      toast.error('执行调试操作失败，请检查 Docker 状态。')
     } finally {
+      setDangerLoading(false)
       setDangerOpen(false)
     }
   }
@@ -194,6 +215,9 @@ export function SettingsPage() {
             settings={settings}
             loading={loading}
             saving={saving}
+            moduleStatus={
+              moduleStatusMap ? moduleStatusMap[(activeTab as 'n8n' | 'dify' | 'oneapi' | 'ragflow') as ModuleId] : undefined
+            }
             onChange={handleLocalChange}
             onSave={handleSave}
           />
@@ -228,9 +252,10 @@ export function SettingsPage() {
             <Button
               variant="destructive"
               shine
+              disabled={dangerLoading}
               onClick={handleConfirmDanger}
             >
-              确认执行
+              {dangerLoading ? '执行中…' : '确认执行'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -541,11 +566,12 @@ interface ModuleSettingsProps {
   settings: AppSettings | null
   loading: boolean
   saving: boolean
+  moduleStatus?: ModuleStatus
   onChange: (next: AppSettings) => void
   onSave: () => void
 }
 
-function ModuleSettings({ moduleKey, settings, loading, saving, onChange, onSave }: ModuleSettingsProps) {
+function ModuleSettings({ moduleKey, settings, loading, saving, moduleStatus, onChange, onSave }: ModuleSettingsProps) {
   const titleMap: Record<ModuleSettingsProps['moduleKey'], string> = {
     n8n: 'n8n 设置',
     dify: 'Dify 设置',
@@ -555,6 +581,38 @@ function ModuleSettings({ moduleKey, settings, loading, saving, onChange, onSave
 
   const [visibleSecretKey, setVisibleSecretKey] = useState<string | null>(null)
   const [applyingRestart, setApplyingRestart] = useState(false)
+  const [runtimeStatus, setRuntimeStatus] = useState<ModuleStatus | undefined>(moduleStatus)
+
+  // 当父组件传入的状态变化时，先同步一份
+  useEffect(() => {
+    setRuntimeStatus(moduleStatus)
+  }, [moduleStatus])
+
+  // 每次打开某个模块设置页时，主动查询一次最新模块状态，避免使用陈旧的初始值
+  useEffect(() => {
+    let cancelled = false
+
+    const loadStatus = async () => {
+      try {
+        const modules = await window.api.listModules()
+        if (cancelled || !Array.isArray(modules)) return
+        const target = modules.find((m) => m && m.id === moduleKey)
+        if (target && target.status) {
+          setRuntimeStatus(target.status as ModuleStatus)
+        }
+      } catch {
+        // 忽略状态查询错误，保持现有状态
+      }
+    }
+
+    loadStatus()
+
+    return () => {
+      cancelled = true
+    }
+  }, [moduleKey])
+
+  const canRestart = runtimeStatus === 'running' || runtimeStatus === 'starting'
 
   if (loading || !settings) {
     return (
@@ -949,13 +1007,15 @@ function ModuleSettings({ moduleKey, settings, loading, saving, onChange, onSave
             <Button shine disabled={saving || applyingRestart} onClick={onSave}>
               保存 n8n 设置
             </Button>
-            <Button
-              variant="outline"
-              disabled={saving || applyingRestart}
-              onClick={handleApplyAndRestart}
-            >
-              {applyingRestart ? '应用中…' : '应用并重启'}
-            </Button>
+            {canRestart && (
+              <Button
+                variant="outline"
+                disabled={saving || applyingRestart}
+                onClick={handleApplyAndRestart}
+              >
+                {applyingRestart ? '应用中…' : '应用并重启'}
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1112,13 +1172,15 @@ function ModuleSettings({ moduleKey, settings, loading, saving, onChange, onSave
             <Button shine disabled={saving || applyingRestart} onClick={onSave}>
               保存 Dify 设置
             </Button>
-            <Button
-              variant="outline"
-              disabled={saving || applyingRestart}
-              onClick={handleApplyAndRestart}
-            >
-              {applyingRestart ? '应用中…' : '应用并重启'}
-            </Button>
+            {canRestart && (
+              <Button
+                variant="outline"
+                disabled={saving || applyingRestart}
+                onClick={handleApplyAndRestart}
+              >
+                {applyingRestart ? '应用中…' : '应用并重启'}
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1431,13 +1493,15 @@ function ModuleSettings({ moduleKey, settings, loading, saving, onChange, onSave
             <Button shine disabled={saving || applyingRestart} onClick={onSave}>
               保存 OneAPI 设置
             </Button>
-            <Button
-              variant="outline"
-              disabled={saving || applyingRestart}
-              onClick={handleApplyAndRestart}
-            >
-              {applyingRestart ? '应用中…' : '应用并重启'}
-            </Button>
+            {canRestart && (
+              <Button
+                variant="outline"
+                disabled={saving || applyingRestart}
+                onClick={handleApplyAndRestart}
+              >
+                {applyingRestart ? '应用中…' : '应用并重启'}
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1522,9 +1586,11 @@ function ModuleSettings({ moduleKey, settings, loading, saving, onChange, onSave
           <Button shine disabled={saving} onClick={onSave}>
             保存模块设置
           </Button>
-          <Button variant="outline" disabled>
-            应用并重启
-          </Button>
+          {canRestart && (
+            <Button variant="outline" disabled>
+              应用并重启
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>

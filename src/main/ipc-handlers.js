@@ -1651,14 +1651,10 @@ async function ensureDifyRuntime() {
   }
 
   try {
-    await waitForOneApiReady(webPort, 60000, 3000)
+    await waitForDifyWebReady(webPort, 60000, 3000)
   } catch (error) {
     if (isVerboseLoggingEnabled()) {
       console.error('[dify] ensureDifyRuntime: Web 就绪检查失败', error)
-    }
-    return {
-      success: false,
-      error: 'Dify Web 未在预期时间内就绪。',
     }
   }
 
@@ -2156,7 +2152,6 @@ async function ensureOneApiContainer(dbConfig, redisConfig) {
 
   const env = [
     `SQL_DSN=${dsn}`,
-    'TZ=Asia/Shanghai',
     `SESSION_SECRET=${generateRandomPassword(32)}`,
     `REDIS_CONN_STRING=redis://${redisHost}:${redisPort}`,
     'SYNC_FREQUENCY=60',
@@ -2233,6 +2228,67 @@ async function ensureOneApiContainer(dbConfig, redisConfig) {
       success: false,
       error: `创建 OneAPI 容器失败：${message}`,
     }
+  }
+}
+
+async function waitForDifyWebReady(port, timeoutMs = 60000, intervalMs = 2000) {
+  const start = Date.now()
+
+  while (true) {
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const req = http.request(
+          {
+            host: '127.0.0.1',
+            port,
+            path: '/',
+            method: 'GET',
+            timeout: 5000,
+          },
+          (res) => {
+            resolve({
+              statusCode: res.statusCode || 0,
+            })
+          },
+        )
+
+        req.on('error', (err) => {
+          reject(err)
+        })
+        req.on('timeout', () => {
+          req.destroy(new Error('Request timeout'))
+        })
+        req.end()
+      })
+
+      const statusCode = result.statusCode
+      if (statusCode >= 200 && statusCode < 400) {
+        if (isVerboseLoggingEnabled()) {
+          console.log('[dify] HTTP 就绪检查通过', { port, statusCode })
+        }
+        return
+      }
+
+      if (isVerboseLoggingEnabled()) {
+        console.log('[dify] HTTP 仍在启动中', {
+          port,
+          statusCode,
+        })
+      }
+    } catch (error) {
+      if (isVerboseLoggingEnabled()) {
+        console.log('[dify] HTTP 就绪检查重试中', {
+          port,
+          error: String(error),
+        })
+      }
+    }
+
+    if (Date.now() - start >= timeoutMs) {
+      throw new Error('Dify Web HTTP ready timeout')
+    }
+
+    await delay(intervalMs)
   }
 }
 
@@ -2895,7 +2951,34 @@ export function setupIpcHandlers() {
     if (!dockerStatus.installed || !dockerStatus.running) {
       return {
         success: false,
-        error: dockerStatus.error || 'Docker 未安装或未运行，无法重启 Dify。',
+        error: dockerStatus.error || 'Docker 未安装或未运行，无法重启 Dify 模块。',
+      }
+    }
+
+    try {
+      const docker = getDockerClient()
+      const config = moduleDockerConfig.dify
+      const containers = await docker.listContainers({
+        all: true,
+        filters: {
+          name: config.containerNames,
+        },
+      })
+
+      for (const info of containers) {
+        const container = docker.getContainer(info.Id)
+        const state = String(info.State || '').toLowerCase()
+        if (state === 'running' || state === 'restarting') {
+          await container.stop()
+        }
+        await container.remove({ force: true })
+      }
+    } catch (error) {
+      const message =
+        (error && error.message) || (typeof error === 'string' ? error : '重启前清理旧 Dify 容器失败')
+      return {
+        success: false,
+        error: `重启前清理旧 Dify 容器失败：${message}`,
       }
     }
 
@@ -2941,16 +3024,16 @@ export function setupIpcHandlers() {
         }
       }
 
-      const info = containers[0]
-      const state = String(info.State || '').toLowerCase()
-      if (state !== 'running') {
-        await maybeStopBaseServicesForModule(moduleId, docker)
-        return { success: true }
+      // 对同一模块关联的所有容器逐一停止（例如 Dify 的 api 与 web 容器）
+      for (const info of containers) {
+        const state = String(info.State || '').toLowerCase()
+        if (state === 'running' || state === 'restarting') {
+          const container = docker.getContainer(info.Id)
+          await container.stop().catch(() => undefined)
+        }
       }
 
-      const container = docker.getContainer(info.Id)
-      await container.stop()
-
+      // 在确认模块容器已停止后，再根据依赖关系尝试停止基础服务
       await maybeStopBaseServicesForModule(moduleId, docker)
 
       return { success: true }
@@ -3214,6 +3297,12 @@ export function setupIpcHandlers() {
                   if (oneApiPrefix) {
                     msg = oneApiPrefix[1]
                   }
+
+                  // 去掉 pm2 / Dify 这类 "HH:mm:ss 0|service-name  |" 的时间和进程前缀
+                  msg = msg.replace(/^\d{2}:\d{2}:\d{2}\s+\d+\|[^|]+\|\s*/, '')
+
+                  // 再兜底去掉简单的 "HH:mm:ss " 时间前缀
+                  msg = msg.replace(/^\d{2}:\d{2}:\d{2}\s+/, '')
 
                   /** @type {import('../shared/types').LogItem} */
                   const item = {

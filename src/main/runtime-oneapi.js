@@ -79,9 +79,11 @@ async function ensureOneApiMysql() {
     const info = containers[0]
     const container = docker.getContainer(info.Id)
 
-    let dbUser = 'oneapi'
-    let dbName = 'one-api'
-    let dbPassword = 'oneapi'
+    // 默认与新建容器分支保持一致，使用 root 账号和 rag_flow 数据库，
+    // 密码为 infini_rag_flow，方便与 RagFlow 共用同一个 MySQL 实例。
+    let dbUser = 'root'
+    let dbName = 'rag_flow'
+    let dbPassword = 'infini_rag_flow'
 
     try {
       const inspectInfo = await container.inspect()
@@ -105,6 +107,13 @@ async function ensureOneApiMysql() {
       if (envMap.MYSQL_USER) dbUser = envMap.MYSQL_USER
       if (envMap.MYSQL_DATABASE) dbName = envMap.MYSQL_DATABASE
       if (envMap.MYSQL_PASSWORD) dbPassword = envMap.MYSQL_PASSWORD
+
+      // 如果使用的是官方 MySQL 镜像且只设置了 MYSQL_ROOT_PASSWORD，
+      // 则按 root 账号推断密码，确保与容器实际配置一致。
+      if (!envMap.MYSQL_USER && !envMap.MYSQL_PASSWORD && envMap.MYSQL_ROOT_PASSWORD) {
+        dbUser = 'root'
+        dbPassword = envMap.MYSQL_ROOT_PASSWORD
+      }
     } catch (error) {
       if (isVerboseLoggingEnabled()) {
         console.error('[oneapi] 读取 MySQL 环境变量失败', error)

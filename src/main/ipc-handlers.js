@@ -1,6 +1,7 @@
 import { app, ipcMain, shell } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
+import http from 'node:http'
 import si from 'systeminformation'
 import {
   setAppSettings,
@@ -69,6 +70,46 @@ const logs = [
   },
 ]
 
+async function checkRagflowHttpHealthy(port) {
+  return new Promise((resolve) => {
+    if (!port || typeof port !== 'number') {
+      resolve({ ok: false, statusCode: 0 })
+      return
+    }
+
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port,
+        path: '/v1/user/register',
+        method: 'GET',
+        timeout: 5000,
+      },
+      (res) => {
+        const statusCode = res.statusCode || 0
+        if (statusCode >= 200 && statusCode < 500) {
+          resolve({ ok: true, statusCode })
+        } else {
+          resolve({ ok: false, statusCode })
+        }
+      },
+    )
+
+    req.on('error', () => {
+      resolve({ ok: false, statusCode: 0 })
+    })
+
+    req.on('timeout', () => {
+      try {
+        req.destroy()
+      } catch {}
+      resolve({ ok: false, statusCode: 0 })
+    })
+
+    req.end()
+  })
+}
+
 export function setupIpcHandlers() {
   const diskSettings = loadSettingsFromDisk()
   if (diskSettings) {
@@ -111,7 +152,6 @@ export function setupIpcHandlers() {
       const docker = getDockerClient()
       containers = await docker.listContainers({ all: true })
     } catch {
-      // Docker 不可用时，将所有模块视为已停止
       return modules.map((m) => ({
         ...m,
         enabled: getModuleEnabled(m),
@@ -119,13 +159,18 @@ export function setupIpcHandlers() {
       }))
     }
 
-    return modules.map((m) => {
+    const results = []
+
+    for (const m of modules) {
       const config = moduleDockerConfig[m.id]
       if (!config) {
-        return {
+        results.push({
           ...m,
+          enabled: getModuleEnabled(m),
           status: 'error',
-        }
+          port: m.port,
+        })
+        continue
       }
 
       const info =
@@ -139,10 +184,13 @@ export function setupIpcHandlers() {
         }) || null
 
       if (!info) {
-        return {
+        results.push({
           ...m,
+          enabled: getModuleEnabled(m),
           status: 'stopped',
-        }
+          port: m.port,
+        })
+        continue
       }
 
       const state = String(info.State || '').toLowerCase()
@@ -161,13 +209,24 @@ export function setupIpcHandlers() {
         }
       }
 
-      return {
+      if (m.id === 'ragflow' && moduleStatus === 'running' && typeof port === 'number') {
+        try {
+          const health = await checkRagflowHttpHealthy(port)
+          if (!health.ok) {
+            moduleStatus = 'starting'
+          }
+        } catch {}
+      }
+
+      results.push({
         ...m,
         enabled: getModuleEnabled(m),
         status: moduleStatus,
         port,
-      }
-    })
+      })
+    }
+
+    return results
   })
 
   ipcMain.handle('modules:start', async (_event, payload) => {

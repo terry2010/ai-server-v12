@@ -157,11 +157,27 @@ async function ensureRagflowElasticsearch() {
       name: ELASTICSEARCH_CONTAINER_NAME,
       Image: imageRef,
       Env: env,
+      ExposedPorts: {
+        '9200/tcp': {},
+        '9300/tcp': {},
+      },
       HostConfig: {
         RestartPolicy: {
           Name: 'always',
         },
         Binds: [`${ELASTICSEARCH_DATA_VOLUME_NAME}:/usr/share/elasticsearch/data`],
+        PortBindings: {
+          '9200/tcp': [
+            {
+              HostPort: '9200',
+            },
+          ],
+          '9300/tcp': [
+            {
+              HostPort: '9300',
+            },
+          ],
+        },
       },
       NetworkingConfig: {
         EndpointsConfig: {
@@ -620,6 +636,109 @@ async function ensureRagflowContainer(dbConfig, redisConfig, minioConfig) {
 }
 
 /**
+ * 等待 Elasticsearch HTTP 服务就绪（仅当检测到 host 端口映射时）
+ */
+async function waitForElasticsearchReady(timeoutMs = 600000, intervalMs = 5000) {
+  const docker = getDockerClient()
+  let hostPort
+
+  try {
+    const containers = await docker.listContainers({
+      all: true,
+      filters: {
+        name: [ELASTICSEARCH_CONTAINER_NAME],
+      },
+    })
+
+    if (Array.isArray(containers) && containers.length > 0) {
+      const info = containers[0]
+      const ports = Array.isArray(info.Ports) ? info.Ports : []
+      const mapped = ports.find(
+        (p) => p && p.PrivatePort === 9200 && typeof p.PublicPort === 'number',
+      )
+      if (mapped && mapped.PublicPort) {
+        hostPort = mapped.PublicPort
+      }
+    }
+  } catch (error) {
+    if (isVerboseLoggingEnabled()) {
+      console.log('[ragflow] Elasticsearch 就绪检查：获取容器端口映射失败', String(error))
+    }
+  }
+
+  if (!hostPort) {
+    if (isVerboseLoggingEnabled()) {
+      console.log(
+        '[ragflow] Elasticsearch 就绪检查：未检测到 host 端口映射，跳过 HTTP 检查',
+      )
+    }
+    return
+  }
+
+  const start = Date.now()
+
+  while (true) {
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const req = http.request(
+          {
+            host: '127.0.0.1',
+            port: hostPort,
+            path: '/',
+            method: 'GET',
+            timeout: 10000,
+          },
+          (res) => {
+            resolve({
+              statusCode: res.statusCode || 0,
+            })
+          },
+        )
+
+        req.on('error', (err) => {
+          reject(err)
+        })
+        req.on('timeout', () => {
+          req.destroy(new Error('Request timeout'))
+        })
+        req.end()
+      })
+
+      const statusCode = result.statusCode
+      if (statusCode >= 200 && statusCode < 400) {
+        if (isVerboseLoggingEnabled()) {
+          console.log('[ragflow] Elasticsearch HTTP 就绪检查通过', {
+            hostPort,
+            statusCode,
+          })
+        }
+        return
+      }
+
+      if (isVerboseLoggingEnabled()) {
+        console.log('[ragflow] Elasticsearch HTTP 仍在启动中', {
+          hostPort,
+          statusCode,
+        })
+      }
+    } catch (error) {
+      if (isVerboseLoggingEnabled()) {
+        console.log('[ragflow] Elasticsearch HTTP 就绪检查重试中', {
+          hostPort,
+          error: String(error),
+        })
+      }
+    }
+
+    if (Date.now() - start >= timeoutMs) {
+      throw new Error('Elasticsearch HTTP ready timeout')
+    }
+
+    await delay(intervalMs)
+  }
+}
+
+/**
  * 等待 RagFlow HTTP 服务就绪
  */
 async function waitForRagflowReady(port, timeoutMs = 600000, intervalMs = 5000) {
@@ -732,6 +851,21 @@ async function ensureRagflowRuntime() {
     return {
       success: false,
       error: (esResult && esResult.error) || '启动 RagFlow 依赖的 Elasticsearch 失败。',
+    }
+  }
+
+  try {
+    if (isVerboseLoggingEnabled()) {
+      console.log('[ragflow] ensureRagflowRuntime: Elasticsearch 容器已启动，开始 HTTP 就绪检查')
+    }
+    await waitForElasticsearchReady()
+  } catch (error) {
+    if (isVerboseLoggingEnabled()) {
+      console.error('[ragflow] ensureRagflowRuntime: Elasticsearch HTTP 就绪检查失败', error)
+    }
+    return {
+      success: false,
+      error: 'Elasticsearch 容器已启动，但在预期时间内未完成初始化，请检查 ai-server-es 容器日志。',
     }
   }
 

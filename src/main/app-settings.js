@@ -38,7 +38,7 @@ const defaultAppSettings = {
     },
     ragflow: {
       enabled: true,
-      port: 9500,
+      port: 9380,
       databaseUrl: '',
       env: {},
     },

@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process'
 import { isVerboseLoggingEnabled, getMirrorPrefixesFromSettings, getAppSettings } from './app-settings.js'
 import { execAsync, getDockerClient, detectDockerStatus } from './docker-client.js'
 import {
@@ -5,6 +6,8 @@ import {
   N8N_DB_CONTAINER_NAME,
   MYSQL_DB_CONTAINER_NAME,
   REDIS_CONTAINER_NAME,
+  MINIO_CONTAINER_NAME,
+  ELASTICSEARCH_CONTAINER_NAME,
   moduleDockerConfig,
   moduleImageMap,
 } from './config.js'
@@ -45,6 +48,12 @@ const moduleBaseServiceContainers = {
   n8n: [N8N_DB_CONTAINER_NAME],
   oneapi: [MYSQL_DB_CONTAINER_NAME, REDIS_CONTAINER_NAME],
   dify: [N8N_DB_CONTAINER_NAME, REDIS_CONTAINER_NAME],
+  ragflow: [
+    MYSQL_DB_CONTAINER_NAME,
+    REDIS_CONTAINER_NAME,
+    MINIO_CONTAINER_NAME,
+    ELASTICSEARCH_CONTAINER_NAME,
+  ],
 }
 
 async function maybeStopBaseServicesForModule(moduleId, docker) {
@@ -150,7 +159,15 @@ function splitImageName(image) {
   const firstSlash = namePart.indexOf('/')
   let pathPart = namePart
   if (firstSlash > 0) {
-    pathPart = namePart.slice(firstSlash + 1)
+    const firstSegment = namePart.slice(0, firstSlash)
+    const isRegistryHost =
+      firstSegment.includes('.') || firstSegment.includes(':') || firstSegment === 'localhost'
+
+    // 只有在首段确认为 registry 主机名时才去掉该段；
+    // 对于 edwardelric233/ragflow 这类 Docker Hub 命名空间，不再误删 "edwardelric233"。
+    if (isRegistryHost) {
+      pathPart = namePart.slice(firstSlash + 1)
+    }
   }
 
   return { pathWithTag: `${pathPart}${tagPart}` }
@@ -648,14 +665,58 @@ async function pullDockerImage(image) {
     }
 
     try {
-      const result = await execAsync(cmd, { env })
+      const result = await new Promise((resolve, reject) => {
+        const child = spawn('docker', ['pull', ref], { env })
+
+        /** @type {string} */
+        let stdoutBuf = ''
+        /** @type {string} */
+        let stderrBuf = ''
+
+        if (child.stdout) {
+          child.stdout.on('data', (data) => {
+            const text = String(data)
+            stdoutBuf += text
+            if (isVerboseLoggingEnabled()) {
+              console.log('[docker-pull]', text.trimEnd())
+            }
+          })
+        }
+
+        if (child.stderr) {
+          child.stderr.on('data', (data) => {
+            const text = String(data)
+            stderrBuf += text
+            if (isVerboseLoggingEnabled()) {
+              console.log('[docker-pull][err]', text.trimEnd())
+            }
+          })
+        }
+
+        child.on('error', (err) => {
+          reject(err)
+        })
+
+        child.on('close', (code) => {
+          if (code === 0) {
+            resolve({ stdout: stdoutBuf, stderr: stderrBuf, code })
+          } else {
+            /** @type {any} */
+            const err = new Error(`docker pull exited with code ${code}`)
+            err.code = code
+            err.stderr = stderrBuf || stdoutBuf
+            reject(err)
+          }
+        })
+      })
 
       if (isVerboseLoggingEnabled()) {
-        if (result.stdout) {
-          console.log('[docker-pull] stdout:', String(result.stdout))
+        const anyResult = /** @type {any} */ (result)
+        if (anyResult && anyResult.stdout) {
+          console.log('[docker-pull] stdout:', String(anyResult.stdout))
         }
-        if (result.stderr) {
-          console.log('[docker-pull] stderr:', String(result.stderr))
+        if (anyResult && anyResult.stderr) {
+          console.log('[docker-pull] stderr:', String(anyResult.stderr))
         }
       }
 

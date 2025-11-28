@@ -184,9 +184,14 @@ async function ensureOneApiMysql() {
     }
   }
 
-  const dbUser = 'oneapi'
-  const dbName = 'one-api'
-  const dbPassword = generateRandomPassword(24)
+  // 与 RagFlow 默认的 service_conf.yaml 保持一致：
+  // mysql:
+  //   name: 'rag_flow'
+  //   user: 'root'
+  //   password: 'infini_rag_flow'
+  const dbUser = 'root'
+  const dbName = 'rag_flow'
+  const dbPassword = 'infini_rag_flow'
 
   try {
     await ensureNetworkExists()
@@ -199,9 +204,9 @@ async function ensureOneApiMysql() {
       })
     }
     const env = [
-      `MYSQL_ROOT_PASSWORD=${generateRandomPassword(24)}`,
-      `MYSQL_USER=${dbUser}`,
-      `MYSQL_PASSWORD=${dbPassword}`,
+      // 只使用 root 账号，并将密码固定为 RagFlow 预期的 infini_rag_flow，
+      // 这样 RagFlow 和 OneAPI 可以共用同一个数据库实例。
+      `MYSQL_ROOT_PASSWORD=${dbPassword}`,
       `MYSQL_DATABASE=${dbName}`,
     ]
     applyHostTimeZoneToEnv(env)
@@ -219,7 +224,7 @@ async function ensureOneApiMysql() {
       NetworkingConfig: {
         EndpointsConfig: {
           [MANAGED_NETWORK_NAME]: {
-            Aliases: [MYSQL_DB_CONTAINER_NAME],
+            Aliases: [MYSQL_DB_CONTAINER_NAME, 'mysql'],
           },
         },
       },
@@ -398,7 +403,7 @@ async function ensureOneApiRedis() {
       NetworkingConfig: {
         EndpointsConfig: {
           [MANAGED_NETWORK_NAME]: {
-            Aliases: [REDIS_CONTAINER_NAME],
+            Aliases: [REDIS_CONTAINER_NAME, 'redis'],
           },
         },
       },

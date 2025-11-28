@@ -40,7 +40,7 @@ const modules = [
     category: 'feature',
     enabled: true,
     status: 'error',
-    port: 9500,
+    port: 9380,
     webUrl: null,
     tags: ['rag'],
   },
@@ -59,6 +59,7 @@ const moduleImageMap = {
   oneapi: 'docker.io/justsong/one-api:latest',
   difyApi: 'docker.io/langgenius/dify-api:1.7.2',
   difyWeb: 'docker.io/langgenius/dify-web:1.7.2',
+  ragflow: 'edwardelric233/ragflow:oc9',
 }
 
 const MANAGED_NETWORK_NAME = 'ai-server-net'
@@ -74,6 +75,12 @@ const DIFY_DATA_VOLUME_NAME = 'ai-server-dify-data'
 const REDIS_IMAGE = 'redis:latest'
 const REDIS_CONTAINER_NAME = 'ai-server-redis'
 const REDIS_DATA_VOLUME_NAME = 'ai-server-redis-data'
+const ELASTICSEARCH_IMAGE = 'elasticsearch:8.11.3'
+const ELASTICSEARCH_CONTAINER_NAME = 'ai-server-es'
+const ELASTICSEARCH_DATA_VOLUME_NAME = 'ai-server-es-data'
+const MINIO_IMAGE = 'quay.io/minio/minio:RELEASE.2025-06-13T11-33-47Z'
+const MINIO_CONTAINER_NAME = 'ai-server-minio'
+const MINIO_DATA_VOLUME_NAME = 'ai-server-minio-data'
 
 export {
   modules,
@@ -92,4 +99,10 @@ export {
   REDIS_IMAGE,
   REDIS_CONTAINER_NAME,
   REDIS_DATA_VOLUME_NAME,
+  ELASTICSEARCH_IMAGE,
+  ELASTICSEARCH_CONTAINER_NAME,
+  ELASTICSEARCH_DATA_VOLUME_NAME,
+  MINIO_IMAGE,
+  MINIO_CONTAINER_NAME,
+  MINIO_DATA_VOLUME_NAME,
 }

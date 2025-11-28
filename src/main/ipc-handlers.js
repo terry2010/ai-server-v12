@@ -23,6 +23,7 @@ import {
 import { ensureN8nRuntime } from './runtime-n8n.js'
 import { ensureOneApiRuntime as ensureOneApiRuntimeExt } from './runtime-oneapi.js'
 import { ensureDifyRuntime } from './runtime-dify.js'
+import { ensureRagflowRuntime } from './runtime-ragflow.js'
 
 // --- Docker status (real detection) + mock data for Phase 3 (modules & logs) ---
 
@@ -225,6 +226,18 @@ export function setupIpcHandlers() {
       return { success: true }
     }
 
+    if (moduleId === 'ragflow') {
+      const runtimeResult = await ensureRagflowRuntime()
+      if (!runtimeResult || !runtimeResult.success) {
+        return {
+          success: false,
+          error: (runtimeResult && runtimeResult.error) || '启动 RagFlow 运行环境失败。',
+        }
+      }
+
+      return { success: true }
+    }
+
     try {
       const docker = getDockerClient()
       const containers = await docker.listContainers({
@@ -302,6 +315,53 @@ export function setupIpcHandlers() {
       return {
         success: false,
         error: (result && result.error) || '重启 Dify 运行环境失败。',
+      }
+    }
+
+    return { success: true }
+  })
+
+  ipcMain.handle('ragflow:restart', async () => {
+    const dockerStatus = await detectDockerStatus()
+    if (!dockerStatus.installed || !dockerStatus.running) {
+      return {
+        success: false,
+        error: dockerStatus.error || 'Docker 未安装或未运行，无法重启 RagFlow 模块。',
+      }
+    }
+
+    try {
+      const docker = getDockerClient()
+      const config = moduleDockerConfig.ragflow
+      const containers = await docker.listContainers({
+        all: true,
+        filters: {
+          name: config.containerNames,
+        },
+      })
+
+      for (const info of containers) {
+        const container = docker.getContainer(info.Id)
+        const state = String(info.State || '').toLowerCase()
+        if (state === 'running' || state === 'restarting') {
+          await container.stop()
+        }
+        await container.remove({ force: true })
+      }
+    } catch (error) {
+      const message =
+        (error && error.message) || (typeof error === 'string' ? error : '重启前清理旧 RagFlow 容器失败')
+      return {
+        success: false,
+        error: `重启前清理旧 RagFlow 容器失败：${message}`,
+      }
+    }
+
+    const runtimeResult = await ensureRagflowRuntime()
+    if (!runtimeResult || !runtimeResult.success) {
+      return {
+        success: false,
+        error: (runtimeResult && runtimeResult.error) || '重启 RagFlow 运行环境失败。',
       }
     }
 

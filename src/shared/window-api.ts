@@ -22,6 +22,7 @@ export interface WindowApi {
   restartN8n(): Promise<{ success: boolean; error?: string }>
   restartOneApi(): Promise<{ success: boolean; error?: string }>
   restartDify(): Promise<{ success: boolean; error?: string }>
+  restartRagflow(): Promise<{ success: boolean; error?: string }>
   getLogs(params: {
     module?: LogModule | 'all'
     level?: LogLevel | 'all'

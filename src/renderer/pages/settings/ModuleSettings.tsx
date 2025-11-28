@@ -969,7 +969,223 @@ export function ModuleSettings({
     )
   }
 
-  // 通用模块配置（如 RagFlow）
+  // RagFlow 配置
+  if (moduleKey === 'ragflow') {
+    const envMap = moduleSettings.env || {}
+
+    const debugEnabled = String(envMap.DEBUG || '').toLowerCase() === 'true'
+
+    const reservedEnvKeys = [
+      'MYSQL_DBNAME',
+      'MYSQL_USER',
+      'MYSQL_PASSWORD',
+      'MYSQL_HOST',
+      'MYSQL_PORT',
+      'MINIO_USER',
+      'MINIO_PASSWORD',
+      'MINIO_HOST',
+      'REDIS_HOST',
+      'REDIS_PORT',
+      'REDIS_PASSWORD',
+      'LOG_LEVELS',
+      'DEBUG',
+    ] as const
+
+    const otherEnvEntries = Object.entries(envMap).filter(
+      ([key]) => !reservedEnvKeys.includes(key as (typeof reservedEnvKeys)[number]),
+    )
+    const otherEnvText = otherEnvEntries
+      .map(([key, value]) => `${key}=${value}`)
+      .join('\n')
+
+    const setEnv = (nextEnv: Record<string, string>) => {
+      updateModule({ env: nextEnv })
+    }
+
+    const handleEnvTextChange = (value: string) => {
+      const lines = value.split('\n')
+      const parsed: Record<string, string> = {}
+      for (const raw of lines) {
+        const line = raw.trim()
+        if (!line) continue
+        const index = line.indexOf('=')
+        if (index <= 0) continue
+        const key = line.slice(0, index).trim()
+        const val = line.slice(index + 1)
+        if (!key) continue
+        if (reservedEnvKeys.includes(key as (typeof reservedEnvKeys)[number])) continue
+        parsed[key] = val
+      }
+
+      const current = moduleSettings.env || {}
+      const reservedSet = new Set(reservedEnvKeys)
+      const nextEnv: Record<string, string> = {}
+
+      for (const [key, val] of Object.entries(current)) {
+        if (reservedSet.has(key as (typeof reservedEnvKeys)[number])) {
+          nextEnv[key] = val as string
+        }
+      }
+
+      for (const [key, val] of Object.entries(parsed)) {
+        if (!reservedSet.has(key as (typeof reservedEnvKeys)[number])) {
+          nextEnv[key] = val
+        }
+      }
+
+      setEnv(nextEnv)
+    }
+
+    const handleEnabledChange = async (checked: boolean) => {
+      if (!checked) {
+        try {
+          const modules = await window.api.listModules()
+          const target = modules.find((m) => m.id === 'ragflow')
+          if (target && (target.status === 'running' || target.status === 'starting')) {
+            toast.warning('RagFlow 模块正在运行，无法禁用。请先在首页停止服务后再尝试禁用。')
+            updateModule({ enabled: true })
+            return
+          }
+        } catch {
+          toast.error('检查 RagFlow 运行状态失败，暂时无法禁用。')
+          updateModule({ enabled: true })
+          return
+        }
+      }
+
+      updateModule({ enabled: checked })
+    }
+
+    const handlePortChange = (value: string) => {
+      const num = Number(value)
+      const portValue = Number.isFinite(num) && num > 0 ? num : 0
+      updateModule({ port: portValue })
+    }
+
+    const handleDebugToggle = (checked: boolean) => {
+      const current = moduleSettings.env || {}
+      const nextEnv: Record<string, string> = {
+        ...current,
+        DEBUG: checked ? 'true' : 'false',
+      }
+      setEnv(nextEnv)
+    }
+
+    const handleSaveAndRestart = async () => {
+      if (saving) return
+
+      setApplyingRestart(true)
+      try {
+        await Promise.resolve(onSave() as any)
+
+        const result = await window.api.restartRagflow()
+        if (!result || !result.success) {
+          toast.error(result?.error ?? '应用并重启 RagFlow 失败，请稍后重试。')
+        } else {
+          toast.success('RagFlow 设置已应用并重启。')
+        }
+      } catch {
+        toast.error('应用并重启 RagFlow 失败，请稍后重试。')
+      } finally {
+        setApplyingRestart(false)
+      }
+    }
+
+    return (
+      <Card className="border-none bg-transparent shadow-none">
+        <CardHeader className="px-0">
+          <CardTitle>{titleMap[moduleKey]}</CardTitle>
+          <CardDescription>配置 RagFlow 的端口、数据库/存储与环境变量等参数。</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 px-0">
+          <Field label="启用 RagFlow 模块" description="关闭后将不在控制台中展示和管理 RagFlow 模块。">
+            <Switch checked={moduleSettings.enabled} onCheckedChange={handleEnabledChange} />
+          </Field>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="服务端口" description="RagFlow HTTP 服务映射到本机的端口号（容器内为 80，经 nginx 反向代理到 9380）。">
+              <Input
+                placeholder="9380"
+                className="font-mono text-xs"
+                value={moduleSettings.port ? String(moduleSettings.port) : ''}
+                onChange={(e) => handlePortChange(e.target.value)}
+              />
+            </Field>
+            <Field label="RagFlow 控制台 URL" description="基于 localhost 与端口推导，仅作为访问参考。">
+              <div className="text-xs font-mono text-slate-700 dark:text-slate-200 break-all">
+                {moduleSettings.port ? `http://localhost:${moduleSettings.port}` : '请先配置服务端口'}
+              </div>
+            </Field>
+          </div>
+
+          <Field
+            label="模型缓存目录（可选）"
+            description="留空则使用容器内部默认缓存路径。如果填写，将把该目录挂载到容器 /root/.ragflow，用于存放 HuggingFace 等模型缓存。"
+          >
+            <Input
+              placeholder="C:\\ragflow-cache\\.ragflow"
+              className="font-mono text-xs"
+              value={moduleSettings.modelCacheDir || ''}
+              onChange={(e) => updateModule({ modelCacheDir: e.target.value })}
+            />
+          </Field>
+
+          <Field
+            label="数据库 / Redis / MinIO 连接（高级）"
+            description="当前默认复用内置 MySQL / Redis / MinIO，通常无需修改。若需自定义，可在下方环境变量中覆盖相关连接设置。"
+          >
+            <div className="text-[11px] text-slate-500 dark:text-slate-300 space-y-1">
+              <div>MySQL 相关：MYSQL_DBNAME / MYSQL_USER / MYSQL_PASSWORD / MYSQL_HOST / MYSQL_PORT</div>
+              <div>Redis 相关：REDIS_HOST / REDIS_PORT / REDIS_PASSWORD</div>
+              <div>MinIO 相关：MINIO_USER / MINIO_PASSWORD / MINIO_HOST</div>
+            </div>
+          </Field>
+
+          <Field
+            label="日志与调试"
+            description="可通过 LOG_LEVELS 与 DEBUG 控制 RagFlow 内部日志行为。"
+          >
+            <div className="flex flex-col gap-2 text-xs text-slate-600 dark:text-slate-200">
+              <label className="flex items-center gap-3">
+                <Switch checked={debugEnabled} onCheckedChange={handleDebugToggle} />
+                <span>启用调试模式（DEBUG=true）</span>
+              </label>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                进阶：可在下方环境变量中配置 LOG_LEVELS（例如 root=INFO,peewee=WARNING）。
+              </div>
+            </div>
+          </Field>
+
+          <Field label="环境变量" description="一行一个，支持 KEY=VALUE 格式（不含上方已经列出的保留字段）。">
+            <textarea
+              rows={4}
+              className="w-full rounded-lg border border-slate-200/80 bg-white/90 px-3 py-2 text-xs font-mono text-slate-900 shadow-sm outline-none placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-0"
+              placeholder="RAGFLOW_EXTRA_OPTION=value&#10;HF_ENDPOINT=http://your-hf-mirror.example.com"
+              value={otherEnvText}
+              onChange={(e) => handleEnvTextChange(e.target.value)}
+            />
+          </Field>
+
+          <div className="flex gap-2 pt-2">
+            <Button shine disabled={saving || applyingRestart} onClick={onSave}>
+              保存 RagFlow 设置
+            </Button>
+            {canRestart && (
+              <Button
+                variant="outline"
+                disabled={saving || applyingRestart}
+                onClick={handleSaveAndRestart}
+              >
+                {applyingRestart ? '应用中…' : '应用并重启'}
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // 通用模块配置（预留给未来其它模块）
   const genericEnvText = Object.entries(moduleSettings.env || {})
     .map(([key, value]) => `${key}=${value}`)
     .join('\n')

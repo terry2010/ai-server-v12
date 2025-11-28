@@ -87,6 +87,8 @@ export interface ModuleSettings {
   enabled: boolean
   port: number
   databaseUrl?: string
+  /** 可选：模型或数据缓存目录（例如 RagFlow 的 /root/.ragflow 挂载） */
+  modelCacheDir?: string
   env: Record<string, string>
 }
 

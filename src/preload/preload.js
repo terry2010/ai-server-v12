@@ -41,6 +41,9 @@ const api = {
   restartDify: () =>
     ipcRenderer.invoke('dify:restart', {}),
 
+  restartRagflow: () =>
+    ipcRenderer.invoke('ragflow:restart', {}),
+
   getLogs: (params = {}) =>
     ipcRenderer.invoke('logs:list', {
       module: params.module ?? 'all',

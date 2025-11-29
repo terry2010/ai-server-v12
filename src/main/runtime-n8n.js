@@ -108,53 +108,125 @@ async function ensurePostgresDatabaseAndUser(
   const docker = getDockerClient()
   const container = docker.getContainer(N8N_DB_CONTAINER_NAME)
 
-  const sql = [
-    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${dbUser}') THEN CREATE ROLE ${dbUser} LOGIN PASSWORD '${dbPassword}'; END IF; END $$;`,
-    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '${dbName}') THEN CREATE DATABASE ${dbName} OWNER ${dbUser}; END IF; END $$;`,
-    `ALTER DATABASE ${dbName} OWNER TO ${dbUser};`,
-    `GRANT ALL PRIVILEGES ON DATABASE ${dbName} TO ${dbUser};`,
-  ].join(' ')
+  // 拆分为多条顶层语句，避免在同一个事务块中执行 CREATE DATABASE
+  const roleSql = `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${dbUser}') THEN CREATE ROLE ${dbUser} LOGIN PASSWORD '${dbPassword}'; END IF; END $$;`
+  const createDbSql = `CREATE DATABASE ${dbName} OWNER ${dbUser};`
+  const alterOwnerSql = `ALTER DATABASE ${dbName} OWNER TO ${dbUser};`
+  const grantSql = `GRANT ALL PRIVILEGES ON DATABASE ${dbName} TO ${dbUser};`
+
+  const statements = [roleSql, createDbSql, alterOwnerSql, grantSql]
 
   try {
-    const exec = await container.exec({
-      Cmd: [
-        'psql',
-        '-U',
-        (adminDbConfig && adminDbConfig.user) || 'postgres',
-        '-h',
-        '127.0.0.1',
-        '-p',
-        String((adminDbConfig && adminDbConfig.port) || 5432),
-        '-d',
-        'postgres',
-        '-v',
-        'ON_ERROR_STOP=1',
-        '-c',
-        sql,
-      ],
-      Env: [
-        `PGPASSWORD=${(adminDbConfig && adminDbConfig.password) || ''}`,
-      ],
-      AttachStdout: true,
-      AttachStderr: true,
-    })
+    const maxAttempts = 20
+    const perAttemptTimeoutMs = 15000
+    const retryDelayMs = 5000
+    let lastErrorMessage = ''
 
-    const stream = await exec.start({ hijack: true, stdin: false })
+    for (let i = 0; i < maxAttempts; i++) {
+      const attempt = i + 1
 
-    await new Promise((resolve, reject) => {
-      stream.on('end', resolve)
-      stream.on('error', reject)
-    })
+      let attemptOk = true
 
-    const inspect = await exec.inspect()
-    if (typeof inspect.ExitCode === 'number' && inspect.ExitCode !== 0) {
-      const message = `${logPrefix || '[postgres]'} 初始化数据库失败（退出码 ${inspect.ExitCode}）`
-      if (isVerboseLoggingEnabled()) {
-        console.error(message)
+      for (const [index, stmt] of statements.entries()) {
+        const exec = await container.exec({
+          Cmd: [
+            'psql',
+            '-U',
+            (adminDbConfig && adminDbConfig.user) || 'postgres',
+            '-h',
+            '127.0.0.1',
+            '-p',
+            String((adminDbConfig && adminDbConfig.port) || 5432),
+            '-d',
+            'postgres',
+            '-c',
+            stmt,
+          ],
+          Env: [
+            `PGPASSWORD=${(adminDbConfig && adminDbConfig.password) || ''}`,
+          ],
+          AttachStdout: true,
+          AttachStderr: true,
+        })
+
+        const start = Date.now()
+        const stream = await exec.start({ hijack: true, stdin: false })
+
+        /** @type {string} */
+        let output = ''
+        stream.on('data', (chunk) => {
+          try {
+            if (!chunk) return
+            if (Buffer.isBuffer(chunk)) {
+              output += chunk.toString('utf-8')
+            } else {
+              output += String(chunk)
+            }
+          } catch {
+            // ignore
+          }
+        })
+
+        let inspect = await exec.inspect()
+        while (
+          (inspect.Running || typeof inspect.Running === 'undefined') &&
+          typeof inspect.ExitCode !== 'number' &&
+          Date.now() - start < perAttemptTimeoutMs
+        ) {
+          await delay(1000)
+          inspect = await exec.inspect()
+        }
+
+        if (Date.now() - start >= perAttemptTimeoutMs) {
+          lastErrorMessage = `${logPrefix || '[postgres]'} 初始化数据库第 ${attempt} 次尝试在 ${perAttemptTimeoutMs}ms 内未完成（可能是 Postgres 尚未完全就绪），将重试。`
+          if (isVerboseLoggingEnabled()) {
+            console.error(lastErrorMessage)
+          }
+          attemptOk = false
+          break
+        }
+
+        if (typeof inspect.ExitCode === 'number' && inspect.ExitCode !== 0) {
+          const tail = output ? output.replace(/\s+$/g, '').slice(-500) : ''
+          const lowerTail = tail.toLowerCase()
+
+          // 针对 CREATE DATABASE 语句，如果只提示已存在则视为成功
+          const isCreateDbStmt = index === 1 || /create\s+database/i.test(stmt)
+          if (
+            isCreateDbStmt &&
+            lowerTail.includes('already exists') &&
+            lowerTail.includes(dbName.toLowerCase())
+          ) {
+            if (isVerboseLoggingEnabled()) {
+              console.log(
+                `${logPrefix || '[postgres]'} 数据库 ${dbName} 已存在，本次初始化将视为成功（忽略该错误）。`,
+              )
+            }
+            // 继续执行后续 ALTER / GRANT 等语句
+            continue
+          }
+
+          lastErrorMessage = `${logPrefix || '[postgres]'} 初始化数据库失败（退出码 ${inspect.ExitCode}），第 ${attempt} 次尝试。${tail ? ` 输出: ${tail}` : ''}`
+          if (isVerboseLoggingEnabled()) {
+            console.error(lastErrorMessage)
+          }
+          attemptOk = false
+          break
+        }
       }
-      return {
-        success: false,
-        error: message,
+
+      if (attemptOk) {
+        lastErrorMessage = ''
+        break
+      }
+
+      if (attempt < maxAttempts) {
+        await delay(retryDelayMs)
+      } else if (lastErrorMessage) {
+        return {
+          success: false,
+          error: lastErrorMessage,
+        }
       }
     }
   } catch (error) {

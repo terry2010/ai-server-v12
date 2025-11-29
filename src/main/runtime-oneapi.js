@@ -267,6 +267,138 @@ async function ensureOneApiMysql() {
   }
 }
 
+async function ensureMysqlDatabaseAndUser(adminDbConfig, { dbName, dbUser, dbPassword, logPrefix }) {
+  const docker = getDockerClient()
+  const container = docker.getContainer(MYSQL_DB_CONTAINER_NAME)
+
+  const sql = [
+    `CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+    `CREATE USER IF NOT EXISTS '${dbUser}'@'%' IDENTIFIED BY '${dbPassword}'`,
+    `GRANT ALL PRIVILEGES ON \`${dbName}\`.* TO '${dbUser}'@'%'`,
+    'FLUSH PRIVILEGES',
+  ].join('; ')
+
+  try {
+    const maxAttempts = 20
+    const perAttemptTimeoutMs = 15000
+    const retryDelayMs = 5000
+    let lastErrorMessage = ''
+
+    for (let i = 0; i < maxAttempts; i++) {
+      const attempt = i + 1
+
+      const exec = await container.exec({
+        Cmd: [
+          'mysql',
+          `-u${adminDbConfig && adminDbConfig.user ? adminDbConfig.user : 'root'}`,
+          `-p${adminDbConfig && adminDbConfig.password ? adminDbConfig.password : ''}`,
+          '--connect-timeout=10',
+          '-h',
+          '127.0.0.1',
+          '-P',
+          String((adminDbConfig && adminDbConfig.port) || 3306),
+          '-e',
+          sql,
+        ],
+        AttachStdout: true,
+        AttachStderr: true,
+      })
+
+      const start = Date.now()
+      const stream = await exec.start({ hijack: true, stdin: false })
+
+      /** @type {string} */
+      let output = ''
+      stream.on('data', (chunk) => {
+        try {
+          if (!chunk) return
+          if (Buffer.isBuffer(chunk)) {
+            output += chunk.toString('utf-8')
+          } else {
+            output += String(chunk)
+          }
+        } catch {
+          // ignore
+        }
+      })
+
+      let inspect = await exec.inspect()
+      while (
+        (inspect.Running || typeof inspect.Running === 'undefined') &&
+        typeof inspect.ExitCode !== 'number' &&
+        Date.now() - start < perAttemptTimeoutMs
+      ) {
+        await delay(1000)
+        inspect = await exec.inspect()
+      }
+
+      if (Date.now() - start >= perAttemptTimeoutMs) {
+        lastErrorMessage = `${logPrefix || '[mysql]'} 初始化数据库第 ${attempt} 次尝试在 ${perAttemptTimeoutMs}ms 内未完成（可能是 MySQL 尚未完全就绪），将重试。`
+        if (isVerboseLoggingEnabled()) {
+          console.error(lastErrorMessage)
+        }
+      } else if (typeof inspect.ExitCode === 'number' && inspect.ExitCode !== 0) {
+        const tail = output ? output.replace(/\s+$/g, '').slice(-500) : ''
+        lastErrorMessage = `${logPrefix || '[mysql]'} 初始化数据库失败（退出码 ${inspect.ExitCode}），第 ${attempt} 次尝试。${tail ? ` 输出: ${tail}` : ''}`
+        if (isVerboseLoggingEnabled()) {
+          console.error(lastErrorMessage)
+        }
+      } else {
+        lastErrorMessage = ''
+        break
+      }
+
+      if (attempt < maxAttempts) {
+        await delay(retryDelayMs)
+      } else if (lastErrorMessage) {
+        return {
+          success: false,
+          error: lastErrorMessage,
+        }
+      }
+    }
+  } catch (error) {
+    const rawMessage = error && error.message ? error.message : String(error)
+    const message = `${logPrefix || '[mysql]'} 初始化数据库失败：${rawMessage}`
+    if (isVerboseLoggingEnabled()) {
+      console.error(message)
+    }
+    return {
+      success: false,
+      error: message,
+    }
+  }
+
+  return {
+    success: true,
+    dbConfig: {
+      host: adminDbConfig.host || MYSQL_DB_CONTAINER_NAME,
+      port: adminDbConfig.port || 3306,
+      database: dbName,
+      user: dbUser,
+      password: dbPassword,
+    },
+  }
+}
+
+async function ensureOneApiDatabase(adminDbConfig) {
+  return ensureMysqlDatabaseAndUser(adminDbConfig, {
+    dbName: 'oneapi',
+    dbUser: 'oneapi',
+    dbPassword: 'infini_oneapi',
+    logPrefix: '[oneapi]',
+  })
+}
+
+async function ensureRagflowDatabase(adminDbConfig) {
+  return ensureMysqlDatabaseAndUser(adminDbConfig, {
+    dbName: 'rag_flow',
+    dbUser: 'ragflow',
+    dbPassword: 'infini_ragflow',
+    logPrefix: '[ragflow]',
+  })
+}
+
 /**
  * 确保 OneAPI 依赖的 Redis 容器存在并运行
  */
@@ -539,7 +671,7 @@ async function ensureOneApiContainer(dbConfig, redisConfig) {
   const env = [
     `SQL_DSN=${dsn}`,
     `SESSION_SECRET=${generateRandomPassword(32)}`,
-    `REDIS_CONN_STRING=redis://${redisHost}:${redisPort}`,
+    `REDIS_CONN_STRING=redis://${redisHost}:${redisPort}/0`,
     'SYNC_FREQUENCY=60',
   ]
 
@@ -702,14 +834,29 @@ async function ensureOneApiRuntime() {
 
   ensureOneApiSecretsInSettings()
 
-  const dbResult = await ensureOneApiMysql()
-  if (!dbResult || !dbResult.success) {
+  const dbInstanceResult = await ensureOneApiMysql()
+  if (!dbInstanceResult || !dbInstanceResult.success) {
     if (isVerboseLoggingEnabled()) {
-      console.error('[oneapi] ensureOneApiRuntime: MySQL 准备失败', dbResult && dbResult.error)
+      console.error('[oneapi] ensureOneApiRuntime: MySQL 准备失败', dbInstanceResult && dbInstanceResult.error)
     }
     return {
       success: false,
-      error: (dbResult && dbResult.error) || '启动 OneAPI 依赖的数据库失败。',
+      error:
+        (dbInstanceResult && dbInstanceResult.error) || '启动 OneAPI 依赖的数据库失败。',
+    }
+  }
+
+  const dbResult = await ensureOneApiDatabase(dbInstanceResult.dbConfig)
+  if (!dbResult || !dbResult.success || !dbResult.dbConfig) {
+    if (isVerboseLoggingEnabled()) {
+      console.error(
+        '[oneapi] ensureOneApiRuntime: 初始化 OneAPI 独立数据库失败',
+        dbResult && dbResult.error,
+      )
+    }
+    return {
+      success: false,
+      error: (dbResult && dbResult.error) || '初始化 OneAPI 使用的数据库失败。',
     }
   }
 
@@ -773,4 +920,11 @@ async function ensureOneApiRuntime() {
   return { success: true }
 }
 
-export { ensureOneApiMysql, ensureOneApiRedis, ensureOneApiContainer, waitForOneApiReady, ensureOneApiRuntime }
+export {
+  ensureOneApiMysql,
+  ensureOneApiRedis,
+  ensureOneApiContainer,
+  waitForOneApiReady,
+  ensureOneApiRuntime,
+  ensureRagflowDatabase,
+}

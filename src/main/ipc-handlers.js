@@ -81,7 +81,8 @@ async function checkRagflowHttpHealthy(port) {
       {
         host: '127.0.0.1',
         port,
-        path: '/v1/user/register',
+        // 与 waitForRagflowReady 一致，使用根路径作为健康检查
+        path: '/',
         method: 'GET',
         timeout: 5000,
       },

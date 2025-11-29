@@ -24,7 +24,7 @@ import {
   delay,
 } from './docker-utils.js'
 import { getDockerClient } from './docker-client.js'
-import { ensureOneApiMysql, ensureOneApiRedis } from './runtime-oneapi.js'
+import { ensureOneApiMysql, ensureOneApiRedis, ensureRagflowDatabase } from './runtime-oneapi.js'
 import { defaultAppSettings, getAppSettings, isVerboseLoggingEnabled } from './app-settings.js'
 
 async function ensureRagflowElasticsearch() {
@@ -483,11 +483,12 @@ async function ensureRagflowContainer(dbConfig, redisConfig, minioConfig) {
   const dbHost = dbConfig && dbConfig.host ? dbConfig.host : MYSQL_DB_CONTAINER_NAME
   const dbPort = dbConfig && dbConfig.port ? dbConfig.port : 3306
   const dbName = dbConfig && dbConfig.database ? dbConfig.database : 'rag_flow'
-  const dbUser = dbConfig && dbConfig.user ? dbConfig.user : 'rag_flow'
+  const dbUser = dbConfig && dbConfig.user ? dbConfig.user : 'ragflow'
   const dbPassword = dbConfig && dbConfig.password ? dbConfig.password : 'infini_rag_flow'
 
   const redisHost = redisConfig && redisConfig.host ? redisConfig.host : REDIS_CONTAINER_NAME
   const redisPort = redisConfig && redisConfig.port ? redisConfig.port : 6379
+  const redisDb = 2
 
   const minioHost = minioConfig && minioConfig.host ? minioConfig.host : MINIO_CONTAINER_NAME
   const minioUser = minioConfig && minioConfig.accessKey ? minioConfig.accessKey : 'rag_flow'
@@ -509,6 +510,7 @@ async function ensureRagflowContainer(dbConfig, redisConfig, minioConfig) {
 
   env.push(`REDIS_HOST=${redisHost}`)
   env.push(`REDIS_PORT=${redisPort}`)
+  env.push(`REDIS_DB=${redisDb}`)
 
   const envFromSettings = (moduleSettings && moduleSettings.env) || {}
   const reservedEnvKeys = [
@@ -600,13 +602,7 @@ async function ensureRagflowContainer(dbConfig, redisConfig, minioConfig) {
       NetworkingConfig: {
         EndpointsConfig: {
           [MANAGED_NETWORK_NAME]: {
-            Aliases: [
-              containerName,
-              'ragflow',
-              MYSQL_DB_CONTAINER_NAME,
-              REDIS_CONTAINER_NAME,
-              MINIO_CONTAINER_NAME,
-            ],
+            Aliases: [containerName, 'ragflow'],
           },
         },
       },
@@ -810,14 +806,31 @@ async function ensureRagflowRuntime() {
     console.log('[ragflow] ensureRagflowRuntime: start')
   }
 
-  const dbResult = await ensureOneApiMysql()
-  if (!dbResult || !dbResult.success || !dbResult.dbConfig) {
+  const dbInstanceResult = await ensureOneApiMysql()
+  if (!dbInstanceResult || !dbInstanceResult.success || !dbInstanceResult.dbConfig) {
     if (isVerboseLoggingEnabled()) {
-      console.error('[ragflow] ensureRagflowRuntime: MySQL 准备失败', dbResult && dbResult.error)
+      console.error(
+        '[ragflow] ensureRagflowRuntime: MySQL 准备失败',
+        dbInstanceResult && dbInstanceResult.error,
+      )
     }
     return {
       success: false,
-      error: (dbResult && dbResult.error) || '启动 RagFlow 依赖的数据库失败。',
+      error: (dbInstanceResult && dbInstanceResult.error) || '启动 RagFlow 依赖的数据库失败。',
+    }
+  }
+
+  const dbResult = await ensureRagflowDatabase(dbInstanceResult.dbConfig)
+  if (!dbResult || !dbResult.success || !dbResult.dbConfig) {
+    if (isVerboseLoggingEnabled()) {
+      console.error(
+        '[ragflow] ensureRagflowRuntime: 初始化 RagFlow 独立数据库失败',
+        dbResult && dbResult.error,
+      )
+    }
+    return {
+      success: false,
+      error: (dbResult && dbResult.error) || '初始化 RagFlow 使用的数据库失败。',
     }
   }
 

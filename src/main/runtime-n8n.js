@@ -101,6 +101,95 @@ async function waitForN8nReady(port, timeoutMs = 60000, intervalMs = 1000) {
   }
 }
 
+async function ensurePostgresDatabaseAndUser(
+  adminDbConfig,
+  { dbName, dbUser, dbPassword, logPrefix },
+) {
+  const docker = getDockerClient()
+  const container = docker.getContainer(N8N_DB_CONTAINER_NAME)
+
+  const sql = [
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${dbUser}') THEN CREATE ROLE ${dbUser} LOGIN PASSWORD '${dbPassword}'; END IF; END $$;`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '${dbName}') THEN CREATE DATABASE ${dbName} OWNER ${dbUser}; END IF; END $$;`,
+    `ALTER DATABASE ${dbName} OWNER TO ${dbUser};`,
+    `GRANT ALL PRIVILEGES ON DATABASE ${dbName} TO ${dbUser};`,
+  ].join(' ')
+
+  try {
+    const exec = await container.exec({
+      Cmd: [
+        'psql',
+        '-U',
+        (adminDbConfig && adminDbConfig.user) || 'postgres',
+        '-h',
+        '127.0.0.1',
+        '-p',
+        String((adminDbConfig && adminDbConfig.port) || 5432),
+        '-d',
+        'postgres',
+        '-v',
+        'ON_ERROR_STOP=1',
+        '-c',
+        sql,
+      ],
+      Env: [
+        `PGPASSWORD=${(adminDbConfig && adminDbConfig.password) || ''}`,
+      ],
+      AttachStdout: true,
+      AttachStderr: true,
+    })
+
+    const stream = await exec.start({ hijack: true, stdin: false })
+
+    await new Promise((resolve, reject) => {
+      stream.on('end', resolve)
+      stream.on('error', reject)
+    })
+
+    const inspect = await exec.inspect()
+    if (typeof inspect.ExitCode === 'number' && inspect.ExitCode !== 0) {
+      const message = `${logPrefix || '[postgres]'} 初始化数据库失败（退出码 ${inspect.ExitCode}）`
+      if (isVerboseLoggingEnabled()) {
+        console.error(message)
+      }
+      return {
+        success: false,
+        error: message,
+      }
+    }
+  } catch (error) {
+    const rawMessage = error && error.message ? error.message : String(error)
+    const message = `${logPrefix || '[postgres]'} 初始化数据库失败：${rawMessage}`
+    if (isVerboseLoggingEnabled()) {
+      console.error(message)
+    }
+    return {
+      success: false,
+      error: message,
+    }
+  }
+
+  return {
+    success: true,
+    dbConfig: {
+      host: (adminDbConfig && adminDbConfig.host) || N8N_DB_CONTAINER_NAME,
+      port: (adminDbConfig && adminDbConfig.port) || 5432,
+      database: dbName,
+      user: dbUser,
+      password: dbPassword,
+    },
+  }
+}
+
+async function ensureDifyDatabase(adminDbConfig) {
+  return ensurePostgresDatabaseAndUser(adminDbConfig, {
+    dbName: 'dify',
+    dbUser: 'dify',
+    dbPassword: 'infini_dify',
+    logPrefix: '[dify]',
+  })
+}
+
 /**
  * 确保 n8n 依赖的 Postgres 容器存在并运行
  */
@@ -572,4 +661,10 @@ async function ensureN8nRuntime() {
   return { success: true }
 }
 
-export { ensureN8nPostgres, ensureN8nContainer, ensureN8nRuntime, waitForN8nReady }
+export {
+  ensureN8nPostgres,
+  ensureN8nContainer,
+  ensureN8nRuntime,
+  waitForN8nReady,
+  ensureDifyDatabase,
+}

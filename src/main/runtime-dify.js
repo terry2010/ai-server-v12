@@ -16,7 +16,7 @@ import {
   delay,
 } from './docker-utils.js'
 import { getDockerClient } from './docker-client.js'
-import { ensureN8nPostgres } from './runtime-n8n.js'
+import { ensureN8nPostgres, ensureDifyDatabase } from './runtime-n8n.js'
 import { ensureOneApiRedis } from './runtime-oneapi.js'
 import { defaultAppSettings, getAppSettings, isVerboseLoggingEnabled } from './app-settings.js'
 
@@ -108,6 +108,20 @@ async function ensureDifyRuntime() {
     }
   }
 
+  const dbResult = await ensureDifyDatabase(pgResult.dbConfig)
+  if (!dbResult || !dbResult.success || !dbResult.dbConfig) {
+    if (isVerboseLoggingEnabled()) {
+      console.error(
+        '[dify] ensureDifyRuntime: 初始化 Dify 独立数据库失败',
+        dbResult && dbResult.error,
+      )
+    }
+    return {
+      success: false,
+      error: (dbResult && dbResult.error) || '初始化 Dify 使用的数据库失败。',
+    }
+  }
+
   // 复用 OneAPI 的 Redis 服务
   const redisResult = await ensureOneApiRedis()
   if (!redisResult || !redisResult.success || !redisResult.redisConfig) {
@@ -132,13 +146,13 @@ async function ensureDifyRuntime() {
 
   const dbUrl = moduleSettings.databaseUrl || ''
 
-  const sharedDb = pgResult.dbConfig
-  const dbHost = envFromSettings.DB_HOST || sharedDb.host || N8N_DB_CONTAINER_NAME
-  const dbPort = envFromSettings.DB_PORT || String(sharedDb.port || 5432)
-  const dbUser = envFromSettings.DB_USERNAME || sharedDb.user || 'postgres'
-  const dbPassword = envFromSettings.DB_PASSWORD || sharedDb.password || ''
+  const difyDb = dbResult.dbConfig
+  const dbHost = envFromSettings.DB_HOST || difyDb.host || N8N_DB_CONTAINER_NAME
+  const dbPort = envFromSettings.DB_PORT || String(difyDb.port || 5432)
+  const dbUser = envFromSettings.DB_USERNAME || difyDb.user || 'postgres'
+  const dbPassword = envFromSettings.DB_PASSWORD || difyDb.password || ''
   const dbName =
-    envFromSettings.DB_DATABASE || (sharedDb && sharedDb.database ? sharedDb.database : 'dify')
+    envFromSettings.DB_DATABASE || (difyDb && difyDb.database ? difyDb.database : 'dify')
 
   const sharedRedis = redisResult.redisConfig
   const redisHost = envFromSettings.REDIS_HOST || sharedRedis.host || REDIS_CONTAINER_NAME
@@ -160,6 +174,7 @@ async function ensureDifyRuntime() {
 
   sharedEnv.push(`REDIS_HOST=${redisHost}`)
   sharedEnv.push(`REDIS_PORT=${redisPort}`)
+  sharedEnv.push('REDIS_DB=1')
   if (redisPassword) {
     sharedEnv.push(`REDIS_PASSWORD=${redisPassword}`)
   }

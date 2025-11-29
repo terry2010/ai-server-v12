@@ -286,5 +286,5 @@
 > - 阶段 3：已完成（main & preload 的 IPC handler 与 window.api 初始实现，已按共享契约接入 Docker 状态、模块列表、设置等核心通道）。
 > - 阶段 4：已完成（Dashboard / Settings / Logs 等核心页面已全部迁移到 window.api，不再依赖前端假数据）。
 > - 阶段 5：已完成（接入真实 Docker 能力，可在 UI 中检测 Docker 状态并启停 n8n / OneAPI / Dify / RagFlow 等模块，包含基础错误提示与防呆逻辑）。
-> - 阶段 6：部分完成（日志聚合/导出与系统 + 模块监控已接入真实数据；模块页的 BrowserView 嵌入尚未实现）。
+> - 阶段 6：已完成（日志聚合/导出与系统 + 模块监控已接入真实数据；模块页的 BrowserView 嵌入已实现）。
 > - 阶段 7：未开始（尚未配置 electron-builder 打包与安装包产出）。

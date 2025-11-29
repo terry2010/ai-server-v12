@@ -3,6 +3,7 @@ import type { AppSettings } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
+import { Input } from '@/components/ui/input'
 import { Field } from './Field'
 
 interface DebugSettingsProps {
@@ -56,6 +57,19 @@ export function DebugSettings({ settings, loading, saving, onChange, onSave, onD
     })
   }
 
+  const handleBrowserViewIdleDestroyMinutesChange = (value: string) => {
+    let minutes = parseInt(value, 10)
+    if (!Number.isFinite(minutes) || minutes <= 0) minutes = 1
+    if (minutes > 60) minutes = 60
+    onChange({
+      ...settings,
+      debug: {
+        ...settings.debug,
+        browserViewIdleDestroyMinutes: minutes,
+      },
+    })
+  }
+
   return (
     <Card className="border-none bg-transparent shadow-none">
       <CardHeader className="px-0">
@@ -77,6 +91,19 @@ export function DebugSettings({ settings, loading, saving, onChange, onSave, onD
             <Switch
               checked={settings.debug.showSystemNameSetting}
               onCheckedChange={handleShowSystemNameSettingChange}
+            />
+          </Field>
+          <Field
+            label="模块 BrowserView 空闲销毁时间（分钟）"
+            description="模块 BrowserView 在后台空闲超过该时间后将被销毁以释放内存。"
+          >
+            <Input
+              type="number"
+              min={1}
+              max={60}
+              className="h-9 w-24 text-xs"
+              value={String(settings.debug.browserViewIdleDestroyMinutes ?? 1)}
+              onChange={(e) => handleBrowserViewIdleDestroyMinutesChange(e.target.value)}
             />
           </Field>
         </div>

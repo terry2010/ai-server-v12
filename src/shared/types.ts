@@ -56,6 +56,7 @@ export interface DebugSettings {
   showDebugTools: boolean
   verboseLogging: boolean
   showSystemNameSetting: boolean
+  browserViewIdleDestroyMinutes: number
 }
 
 export interface DockerActionResult {

@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setupIpcHandlers } from './ipc-handlers.js'
+import { setBrowserViewMainWindow } from './browserview-manager.js'
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
@@ -18,6 +19,8 @@ async function createWindow() {
       preload: path.join(__dirname, '../preload/preload.js'),
     },
   })
+
+  setBrowserViewMainWindow(mainWindow)
 
   if (isDev) {
     await mainWindow.loadURL('http://localhost:5174')

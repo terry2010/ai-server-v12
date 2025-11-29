@@ -47,4 +47,10 @@ export interface WindowApi {
   dockerRemoveAll(): Promise<DockerActionResult>
   dockerPruneVolumes(): Promise<DockerActionResult>
   dockerFullCleanup(): Promise<DockerActionResult>
+  openModuleView(moduleId: ModuleId): Promise<{ success: boolean; error?: string }>
+  closeModuleView(): Promise<{ success: boolean; error?: string }>
+  controlModuleView(
+    moduleId: ModuleId,
+    action: 'home' | 'reload' | 'back' | 'forward',
+  ): Promise<{ success: boolean; error?: string }>
 }

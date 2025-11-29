@@ -25,6 +25,11 @@ import { ensureN8nRuntime } from './runtime-n8n.js'
 import { ensureOneApiRuntime as ensureOneApiRuntimeExt } from './runtime-oneapi.js'
 import { ensureDifyRuntime } from './runtime-dify.js'
 import { ensureRagflowRuntime } from './runtime-ragflow.js'
+import {
+  openModuleBrowserView,
+  closeBrowserView,
+  controlModuleBrowserView,
+} from './browserview-manager.js'
 
 // --- Docker status (real detection) + mock data for Phase 3 (modules & logs) ---
 
@@ -915,6 +920,22 @@ export function setupIpcHandlers() {
       logsClearSinceUnix = 0
       return { success: false }
     }
+  })
+
+  // BrowserView 集成
+  ipcMain.handle('browserView:openModule', async (_event, payload) => {
+    const moduleId = payload && typeof payload.moduleId === 'string' ? payload.moduleId : undefined
+    return openModuleBrowserView(moduleId)
+  })
+
+  ipcMain.handle('browserView:close', async () => {
+    return closeBrowserView()
+  })
+
+  ipcMain.handle('browserView:control', async (_event, payload) => {
+    const moduleId = payload && typeof payload.moduleId === 'string' ? payload.moduleId : undefined
+    const action = payload && typeof payload.action === 'string' ? payload.action : undefined
+    return controlModuleBrowserView(moduleId, action)
   })
 
   // Monitoring

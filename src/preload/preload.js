@@ -72,6 +72,19 @@ const api = {
   getSystemMetrics: () => ipcRenderer.invoke('monitor:getSystem', {}),
 
   getModuleMetrics: () => ipcRenderer.invoke('monitor:getModules', {}),
+
+  openModuleView: (moduleId) =>
+    ipcRenderer.invoke('browserView:openModule', {
+      moduleId,
+    }),
+
+  closeModuleView: () => ipcRenderer.invoke('browserView:close', {}),
+
+  controlModuleView: (moduleId, action) =>
+    ipcRenderer.invoke('browserView:control', {
+      moduleId,
+      action,
+    }),
 }
 
 contextBridge.exposeInMainWorld('api', api)

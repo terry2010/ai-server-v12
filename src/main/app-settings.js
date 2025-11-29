@@ -47,6 +47,7 @@ const defaultAppSettings = {
     showDebugTools: false,
     verboseLogging: false,
     showSystemNameSetting: true,
+    browserViewIdleDestroyMinutes: 1,
   },
 }
 

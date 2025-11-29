@@ -72,6 +72,14 @@
         "portable"
       ]
     },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "license": "build/installer-license-zh_CN.txt",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
     "mac": {
       "target": [
         "dmg"

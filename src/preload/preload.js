@@ -85,6 +85,14 @@ const api = {
       moduleId,
       action,
     }),
+  backupModuleData: (moduleId) =>
+    ipcRenderer.invoke('modules:backupData', {
+      moduleId,
+    }),
+  restoreModuleData: (moduleId) =>
+    ipcRenderer.invoke('modules:restoreData', {
+      moduleId,
+    }),
 }
 
 contextBridge.exposeInMainWorld('api', api)

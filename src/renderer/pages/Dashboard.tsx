@@ -24,20 +24,33 @@ export interface ServiceModule {
   lastError?: string | null
 }
 
+const formatUptime = (
+  uptimeSeconds: number | null | undefined,
+  status: ServiceStatus,
+): string => {
+  if (uptimeSeconds == null || uptimeSeconds < 0 || Number.isNaN(uptimeSeconds)) {
+    if (status === 'running') return '已启动'
+    if (status === 'starting') return '启动中…'
+    if (status === 'stopping') return '停止中…'
+    return '—'
+  }
+
+  const total = Math.floor(uptimeSeconds)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  const pad = (n: number) => String(n).padStart(2, '0')
+
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+}
+
 const mapModuleToService = (
   module: ModuleInfo,
   runtimeMetrics?: ModuleRuntimeMetrics | null,
 ): ServiceModule => {
   const status = module.status as ServiceStatus
   const isRunning = status === 'running'
-  const uptime =
-    status === 'running'
-      ? '已启动'
-      : status === 'starting'
-      ? '启动中…'
-      : status === 'stopping'
-      ? '停止中…'
-      : '—'
+  const uptime = formatUptime(runtimeMetrics?.uptimeSeconds ?? null, status)
 
   const cpu =
     runtimeMetrics && runtimeMetrics.cpuUsage != null
@@ -129,12 +142,18 @@ export function DashboardPage() {
                   ? 1
                   : 0
 
+              const uptime = formatUptime(
+                runtime.uptimeSeconds ?? null,
+                (runtime.status as ServiceStatus) ?? s.status,
+              )
+
               return {
                 ...s,
                 metrics: {
                   ...s.metrics,
                   cpu,
                   memory,
+                  uptime,
                 },
               }
             }),

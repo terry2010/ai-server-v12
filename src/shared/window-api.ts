@@ -53,4 +53,19 @@ export interface WindowApi {
     moduleId: ModuleId,
     action: 'home' | 'reload' | 'back' | 'forward',
   ): Promise<{ success: boolean; error?: string }>
+  backupModuleData(
+    moduleId: ModuleId,
+  ): Promise<{
+    success: boolean
+    path?: string
+    error?: string
+    cancelled?: boolean
+  }>
+  restoreModuleData(
+    moduleId: ModuleId,
+  ): Promise<{
+    success: boolean
+    error?: string
+    cancelled?: boolean
+  }>
 }

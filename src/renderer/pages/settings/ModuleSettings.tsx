@@ -36,11 +36,18 @@ export function ModuleSettings({
   const [visibleSecretKey, setVisibleSecretKey] = useState<string | null>(null)
   const [applyingRestart, setApplyingRestart] = useState(false)
   const [runtimeStatus, setRuntimeStatus] = useState<ModuleStatus | undefined>(moduleStatus)
+  const [backupLoading, setBackupLoading] = useState(false)
+  const [restoreLoading, setRestoreLoading] = useState(false)
 
   // 当父组件传入的状态变化时，先同步一份
   useEffect(() => {
     setRuntimeStatus(moduleStatus)
   }, [moduleStatus])
+
+  useEffect(() => {
+    setBackupLoading(false)
+    setRestoreLoading(false)
+  }, [moduleKey])
 
   // 每次打开某个模块设置页时，主动查询一次最新模块状态，避免使用陈旧的初始值
   useEffect(() => {
@@ -292,6 +299,52 @@ export function ModuleSettings({
       }
     }
 
+    const handleBackupData = async () => {
+      if (backupLoading) return
+      setBackupLoading(true)
+      try {
+        const result = await window.api.backupModuleData('n8n')
+        if (!result || (result as any).cancelled) {
+          window.alert('已取消备份 n8n 数据。')
+          return
+        }
+        if (!result.success) {
+          window.alert(result.error ?? '备份 n8n 数据失败，请稍后重试。')
+          return
+        }
+        if (result.path) {
+          window.alert(`n8n 数据已备份到：${result.path}`)
+        } else {
+          window.alert('n8n 数据备份完成。')
+        }
+      } catch {
+        window.alert('备份 n8n 数据失败，请稍后重试。')
+      } finally {
+        setBackupLoading(false)
+      }
+    }
+
+    const handleRestoreData = async () => {
+      if (restoreLoading) return
+      setRestoreLoading(true)
+      try {
+        const result = await window.api.restoreModuleData('n8n')
+        if (!result || (result as any).cancelled) {
+          window.alert('已取消恢复 n8n 数据。')
+          return
+        }
+        if (!result.success) {
+          window.alert(result.error ?? '恢复 n8n 数据失败，请稍后重试。')
+          return
+        }
+        window.alert('n8n 数据恢复完成。')
+      } catch {
+        window.alert('恢复 n8n 数据失败，请稍后重试。')
+      } finally {
+        setRestoreLoading(false)
+      }
+    }
+
     return (
       <Card className="border-none bg-transparent shadow-none">
         <CardHeader className="px-0">
@@ -459,6 +512,29 @@ export function ModuleSettings({
                   </div>
                 )
               })}
+            </div>
+          </Field>
+          <Field
+            label="数据备份与恢复"
+            description="备份当前 n8n 模块的数据库数据，或从备份文件中恢复（请在操作前确认已了解风险）。"
+          >
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={backupLoading}
+                onClick={handleBackupData}
+              >
+                {backupLoading ? '备份中…' : '备份数据'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={restoreLoading}
+                onClick={handleRestoreData}
+              >
+                {restoreLoading ? '恢复中…' : '恢复备份'}
+              </Button>
             </div>
           </Field>
 
@@ -810,6 +886,52 @@ export function ModuleSettings({
       }
     }
 
+    const handleBackupData = async () => {
+      if (backupLoading) return
+      setBackupLoading(true)
+      try {
+        const result = await window.api.backupModuleData('oneapi')
+        if (!result || (result as any).cancelled) {
+          window.alert('已取消备份 OneAPI 数据。')
+          return
+        }
+        if (!result.success) {
+          window.alert(result.error ?? '备份 OneAPI 数据失败，请稍后重试。')
+          return
+        }
+        if (result.path) {
+          window.alert(`OneAPI 数据已备份到：${result.path}`)
+        } else {
+          window.alert('OneAPI 数据备份完成。')
+        }
+      } catch {
+        window.alert('备份 OneAPI 数据失败，请稍后重试。')
+      } finally {
+        setBackupLoading(false)
+      }
+    }
+
+    const handleRestoreData = async () => {
+      if (restoreLoading) return
+      setRestoreLoading(true)
+      try {
+        const result = await window.api.restoreModuleData('oneapi')
+        if (!result || (result as any).cancelled) {
+          window.alert('已取消恢复 OneAPI 数据。')
+          return
+        }
+        if (!result.success) {
+          window.alert(result.error ?? '恢复 OneAPI 数据失败，请稍后重试。')
+          return
+        }
+        window.alert('OneAPI 数据恢复完成。')
+      } catch {
+        window.alert('恢复 OneAPI 数据失败，请稍后重试。')
+      } finally {
+        setRestoreLoading(false)
+      }
+    }
+
     return (
       <Card className="border-none bg-transparent shadow-none">
         <CardHeader className="px-0">
@@ -837,7 +959,7 @@ export function ModuleSettings({
             </Field>
           </div>
 
-          <Field label="日志等级" description="控制是否启用 OneAPI 的调试日志（DEBUG / DEBUG_SQL）。">
+          <Field label="日志等级" description="控制是否启用 OneAPI 的调试日志（DEBUG / DEBUG_SQL）">
             <div className="flex flex-col gap-2 text-xs text-slate-600 dark:text-slate-200">
               <label className="flex items-center gap-3">
                 <Switch
@@ -947,6 +1069,29 @@ export function ModuleSettings({
                   </div>
                 )
               })}
+            </div>
+          </Field>
+          <Field
+            label="数据备份与恢复"
+            description="备份当前 OneAPI 模块的数据库数据，或从备份文件中恢复（请在操作前确认已了解风险）。"
+          >
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={backupLoading}
+                onClick={handleBackupData}
+              >
+                {backupLoading ? '备份中…' : '备份数据'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={restoreLoading}
+                onClick={handleRestoreData}
+              >
+                {restoreLoading ? '恢复中…' : '恢复备份'}
+              </Button>
             </div>
           </Field>
 

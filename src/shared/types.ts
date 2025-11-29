@@ -82,6 +82,8 @@ export interface ModuleRuntimeMetrics {
   status: ModuleStatus
   cpuUsage: number | null
   memoryUsage: number | null
+  startedAt?: string | null
+  uptimeSeconds?: number | null
 }
 
 export interface ModuleSettings {

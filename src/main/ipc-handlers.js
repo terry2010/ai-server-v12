@@ -1,9 +1,10 @@
-import { app, ipcMain, shell } from 'electron'
+import { app, ipcMain, shell, dialog } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { getLogsDir } from './app-paths.js'
 import http from 'node:http'
 import si from 'systeminformation'
+import { PassThrough } from 'node:stream'
 import {
   setAppSettings,
   defaultAppSettings,
@@ -11,7 +12,12 @@ import {
   mergeAppSettings,
   saveSettingsToDisk,
 } from './app-settings.js'
-import { modules, moduleDockerConfig } from './config.js'
+import {
+  modules,
+  moduleDockerConfig,
+  N8N_DB_CONTAINER_NAME,
+  MYSQL_DB_CONTAINER_NAME,
+} from './config.js'
 import { getDockerClient, detectDockerStatus, startDockerDesktop } from './docker-client.js'
 import {
   ensureImagePresentForModule,
@@ -21,9 +27,13 @@ import {
   dockerPruneVolumes,
   dockerFullCleanup,
   pullDockerImage,
+  delay,
 } from './docker-utils.js'
-import { ensureN8nRuntime } from './runtime-n8n.js'
-import { ensureOneApiRuntime as ensureOneApiRuntimeExt } from './runtime-oneapi.js'
+import { ensureN8nRuntime, ensureN8nPostgres } from './runtime-n8n.js'
+import {
+  ensureOneApiRuntime as ensureOneApiRuntimeExt,
+  ensureOneApiMysql,
+} from './runtime-oneapi.js'
 import { ensureDifyRuntime } from './runtime-dify.js'
 import { ensureRagflowRuntime } from './runtime-ragflow.js'
 import {
@@ -75,6 +85,205 @@ const logs = [
     message: '数据库连接失败，请检查 RAG_FLOW_DB_URL 配置。',
   },
 ]
+
+async function backupN8nDatabaseToFile(filePath) {
+  const dbResult = await ensureN8nPostgres()
+  if (!dbResult || !dbResult.success || !dbResult.dbConfig) {
+    const message = (dbResult && dbResult.error) || '准备 n8n 依赖的数据库失败。'
+    throw new Error(message)
+  }
+
+  const docker = getDockerClient()
+  const container = docker.getContainer(N8N_DB_CONTAINER_NAME)
+
+  const dbConfig = dbResult.dbConfig
+  const user = dbConfig.user || 'n8n'
+  const database = dbConfig.database || 'n8n'
+  const password = dbConfig.password || ''
+
+  const exec = await container.exec({
+    // 在容器内部直接连接本地 Postgres，避免依赖外部主机名解析
+    Cmd: ['pg_dump', '-U', user, database],
+    Env: [`PGPASSWORD=${password}`],
+    AttachStdout: true,
+    AttachStderr: true,
+  })
+
+  const stream = await exec.start({ hijack: true, stdin: false })
+
+  const fileStream = fs.createWriteStream(filePath)
+  const stderrStream = new PassThrough()
+
+  let stderrText = ''
+  stderrStream.on('data', (chunk) => {
+    try {
+      if (!chunk) return
+      if (Buffer.isBuffer(chunk)) {
+        stderrText += chunk.toString('utf-8')
+      } else {
+        stderrText += String(chunk)
+      }
+    } catch {}
+  })
+
+  container.modem.demuxStream(stream, fileStream, stderrStream)
+
+  const waitForExecN8n = new Promise((resolve, reject) => {
+    let finished = false
+    const done = () => {
+      if (finished) return
+      finished = true
+      resolve()
+    }
+    const fail = (err) => {
+      if (finished) return
+      finished = true
+      reject(err)
+    }
+
+    // 以 Docker exec 主 stream 的结束作为完成信号
+    stream.on('end', done)
+    stream.on('close', done)
+    stream.on('error', fail)
+
+    // 仍然监听文件流和 stderr 流的错误
+    fileStream.on('error', fail)
+    stderrStream.on('error', fail)
+  })
+
+  const execTimeoutMsN8n = 2 * 60 * 1000
+  await Promise.race([
+    waitForExecN8n,
+    new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('n8n 数据库备份执行超时。'))
+      }, execTimeoutMsN8n)
+    }),
+  ])
+
+  // 备份进程已结束，检查输出文件和错误信息
+  try {
+    const stats = await fs.promises.stat(filePath)
+    if (!stats || !stats.size) {
+      const tail = stderrText ? stderrText.replace(/\s+$/g, '').slice(-500) : ''
+      const detail = tail || 'pg_dump 未产生任何输出。'
+      throw new Error(`n8n 数据库备份失败：${detail}`)
+    }
+  } catch (statError) {
+    const tail = stderrText ? stderrText.replace(/\s+$/g, '').slice(-500) : ''
+    const detail =
+      tail || (statError && statError.message) || '无法读取备份文件信息。'
+    throw new Error(`n8n 数据库备份失败：${detail}`)
+  }
+
+  const stderrLower = stderrText.toLowerCase()
+  if (stderrLower.includes('error') || stderrLower.includes('fatal')) {
+    const tail = stderrText ? stderrText.replace(/\s+$/g, '').slice(-500) : ''
+    throw new Error(`n8n 数据库备份可能失败：${tail}`)
+  }
+}
+
+async function backupOneApiDatabaseToFile(filePath) {
+  const dbInstanceResult = await ensureOneApiMysql()
+  if (!dbInstanceResult || !dbInstanceResult.success || !dbInstanceResult.dbConfig) {
+    const message = (dbInstanceResult && dbInstanceResult.error) || '准备 OneAPI 依赖的 MySQL 实例失败。'
+    throw new Error(message)
+  }
+
+  const adminConfig = dbInstanceResult.dbConfig
+  const docker = getDockerClient()
+  const container = docker.getContainer(MYSQL_DB_CONTAINER_NAME)
+
+  const user = adminConfig.user || 'root'
+  const password = adminConfig.password || ''
+
+  const exec = await container.exec({
+    Cmd: [
+      'mysqldump',
+      `-u${user}`,
+      `-p${password}`,
+      '--single-transaction',
+      '--quick',
+      '--routines',
+      'oneapi',
+    ],
+    AttachStdout: true,
+    AttachStderr: true,
+  })
+
+  const stream = await exec.start({ hijack: true, stdin: false })
+
+  const fileStream = fs.createWriteStream(filePath)
+  const stderrStream = new PassThrough()
+
+  let stderrText = ''
+  stderrStream.on('data', (chunk) => {
+    try {
+      if (!chunk) return
+      if (Buffer.isBuffer(chunk)) {
+        stderrText += chunk.toString('utf-8')
+      } else {
+        stderrText += String(chunk)
+      }
+    } catch {}
+  })
+
+  container.modem.demuxStream(stream, fileStream, stderrStream)
+
+  const waitForExecOneApi = new Promise((resolve, reject) => {
+    let finished = false
+    const done = () => {
+      if (finished) return
+      finished = true
+      resolve()
+    }
+    const fail = (err) => {
+      if (finished) return
+      finished = true
+      reject(err)
+    }
+
+    // 以 Docker exec 主 stream 的结束作为完成信号
+    stream.on('end', done)
+    stream.on('close', done)
+    stream.on('error', fail)
+
+    // 仍然监听文件流和 stderr 流的错误
+    fileStream.on('error', fail)
+    stderrStream.on('error', fail)
+  })
+
+  const execTimeoutMsOneApi = 2 * 60 * 1000
+  await Promise.race([
+    waitForExecOneApi,
+    new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('OneAPI 数据库备份执行超时。'))
+      }, execTimeoutMsOneApi)
+    }),
+  ])
+
+  // 备份进程已结束，检查输出文件和错误信息
+  try {
+    const stats = await fs.promises.stat(filePath)
+    if (!stats || !stats.size) {
+      const tail = stderrText ? stderrText.replace(/\s+$/g, '').slice(-500) : ''
+      const detail = tail || 'mysqldump 未产生任何输出。'
+      throw new Error(`OneAPI 数据库备份失败：${detail}`)
+    }
+  } catch (statError) {
+    const tail = stderrText ? stderrText.replace(/\s+$/g, '').slice(-500) : ''
+    const detail =
+      tail || (statError && statError.message) || '无法读取备份文件信息。'
+    throw new Error(`OneAPI 数据库备份失败：${detail}`)
+  }
+
+  const stderrLower = stderrText.toLowerCase()
+  if (stderrLower.includes('error') || stderrLower.includes('fatal')) {
+    const tail = stderrText ? stderrText.replace(/\s+$/g, '').slice(-500) : ''
+    throw new Error(`OneAPI 数据库备份可能失败：${tail}`)
+  }
+}
 
 async function checkRagflowHttpHealthy(port) {
   return new Promise((resolve) => {
@@ -485,6 +694,92 @@ export function setupIpcHandlers() {
         success: false,
         error: `停止模块失败：${message}`,
       }
+    }
+  })
+
+  ipcMain.handle('modules:backupData', async (_event, payload) => {
+    const moduleId =
+      payload && typeof payload.moduleId === 'string' ? payload.moduleId : undefined
+
+    if (!moduleId) {
+      return { success: false, error: '模块 ID 无效，无法执行备份。' }
+    }
+
+    const dockerStatus = await detectDockerStatus()
+    if (!dockerStatus.installed || !dockerStatus.running) {
+      return {
+        success: false,
+        error: dockerStatus.error || 'Docker 未安装或未运行，无法执行备份。',
+      }
+    }
+
+    const now = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const yyyy = now.getFullYear()
+    const MM = pad(now.getMonth() + 1)
+    const dd = pad(now.getDate())
+    const hh = pad(now.getHours())
+    const mm = pad(now.getMinutes())
+    const ss = pad(now.getSeconds())
+    const defaultName = `${moduleId}-db-backup-${yyyy}${MM}${dd}-${hh}${mm}${ss}.sql`
+
+    let defaultDir = ''
+    try {
+      defaultDir = app.getPath('documents')
+    } catch {
+      try {
+        defaultDir = app.getPath('downloads')
+      } catch {
+        defaultDir = ''
+      }
+    }
+
+    const defaultPath = defaultDir ? path.join(defaultDir, defaultName) : defaultName
+
+    const dialogResult = await dialog.showSaveDialog({
+      title: '选择备份文件保存位置',
+      defaultPath,
+      filters: [
+        { name: '数据库备份文件', extensions: ['sql'] },
+        { name: '所有文件', extensions: ['*'] },
+      ],
+    })
+
+    if (dialogResult.canceled || !dialogResult.filePath) {
+      return { success: false, cancelled: true }
+    }
+
+    const filePath = dialogResult.filePath
+
+    try {
+      if (moduleId === 'n8n') {
+        await backupN8nDatabaseToFile(filePath)
+      } else if (moduleId === 'oneapi') {
+        await backupOneApiDatabaseToFile(filePath)
+      } else {
+        return { success: false, error: '当前版本暂不支持该模块的数据备份。' }
+      }
+
+      return { success: true, path: filePath }
+    } catch (error) {
+      const message = error && error.message ? error.message : String(error)
+      try {
+        // 输出详细错误日志便于排查
+        // eslint-disable-next-line no-console
+        console.error('[backup] modules:backupData 失败', {
+          moduleId,
+          filePath,
+          error: message,
+        })
+      } catch {}
+      return { success: false, error: message }
+    }
+  })
+
+  ipcMain.handle('modules:restoreData', async () => {
+    return {
+      success: false,
+      error: '当前版本暂未实现数据恢复功能，请等待后续更新。',
     }
   })
 
@@ -1032,6 +1327,8 @@ export function setupIpcHandlers() {
 
         let cpuUsage = null
         let memoryUsage = null
+        let startedAt = null
+        let uptimeSeconds = null
         const status = getModuleStatus(info)
 
         if (info && status === 'running') {
@@ -1063,6 +1360,23 @@ export function setupIpcHandlers() {
                 memoryUsage = (used / limit) * 100
               }
             }
+
+            const inspectData = await container.inspect()
+            const startedRaw =
+              inspectData &&
+              inspectData.State &&
+              typeof inspectData.State.StartedAt === 'string'
+                ? inspectData.State.StartedAt
+                : null
+
+            if (startedRaw) {
+              const startedMs = Date.parse(startedRaw)
+              if (!Number.isNaN(startedMs)) {
+                const diffSeconds = Math.floor((Date.now() - startedMs) / 1000)
+                uptimeSeconds = diffSeconds > 0 ? diffSeconds : 0
+                startedAt = new Date(startedMs).toISOString()
+              }
+            }
           } catch {
             // ignore stats errors
           }
@@ -1077,6 +1391,8 @@ export function setupIpcHandlers() {
           status,
           cpuUsage: clamp(cpuUsage),
           memoryUsage: clamp(memoryUsage),
+          startedAt,
+          uptimeSeconds,
         })
       }
 

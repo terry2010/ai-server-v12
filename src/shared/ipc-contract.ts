@@ -20,6 +20,8 @@ export interface IpcRequestMap {
   'modules:list': EmptyPayload
   'modules:start': { moduleId: ModuleId }
   'modules:stop': { moduleId: ModuleId }
+  'modules:backupData': { moduleId: ModuleId }
+  'modules:restoreData': { moduleId: ModuleId }
   'logs:list': {
     module?: LogModule | 'all'
     level?: LogLevel | 'all'
@@ -53,6 +55,17 @@ export interface IpcResponseMap {
   'modules:list': ModuleInfo[]
   'modules:start': { success: boolean; error?: string }
   'modules:stop': { success: boolean; error?: string }
+  'modules:backupData': {
+    success: boolean
+    path?: string
+    error?: string
+    cancelled?: boolean
+  }
+  'modules:restoreData': {
+    success: boolean
+    error?: string
+    cancelled?: boolean
+  }
   'logs:list': { items: LogItem[]; total: number }
   'logs:export': { success: boolean; path?: string; error?: string }
   'logs:clear': { success: boolean }

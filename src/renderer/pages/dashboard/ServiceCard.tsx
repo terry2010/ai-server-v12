@@ -1,4 +1,4 @@
-import { Activity, Clock, Cpu, Database, ExternalLink, FileText, MemoryStick, Play, Square } from 'lucide-react'
+import { Activity, Cpu, ExternalLink, FileText, MemoryStick, Play, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusDot, type ServiceStatus } from '@/components/StatusDot'
@@ -24,9 +24,14 @@ interface MetricLineProps {
   label: string
   value: string
   accent: string
+  percent?: number
 }
 
-function MetricLine({ icon: Icon, label, value, accent }: MetricLineProps) {
+function MetricLine({ icon: Icon, label, value, accent, percent }: MetricLineProps) {
+  const clamped =
+    percent == null || Number.isNaN(percent) ? 0 : Math.max(0, Math.min(100, percent))
+  const barWidth = `${Math.max(4, clamped)}%`
+
   return (
     <div className="flex items-center gap-2">
       <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-sky-50 text-sky-700">
@@ -38,7 +43,10 @@ function MetricLine({ icon: Icon, label, value, accent }: MetricLineProps) {
           <span className="font-semibold text-slate-800 dark:text-slate-100">{value}</span>
         </div>
         <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200">
-          <div className={`h-full w-4/5 bg-gradient-to-r ${accent}`} />
+          <div
+            className={`h-full bg-gradient-to-r ${accent}`}
+            style={{ width: barWidth }}
+          />
         </div>
       </div>
     </div>
@@ -92,16 +100,29 @@ export function ServiceCard({ service, onToggle, onOpenModule, onViewLogs }: Ser
                   : '异常'}
               </span>
             </div>
-            <span className="text-[10px] text-slate-400">端口 {service.metrics.port}</span>
+            <div className="flex items-center gap-2 text-[10px] text-slate-400">
+              <span>运行时间 {service.metrics.uptime}</span>
+              <span>端口 {service.metrics.port}</span>
+            </div>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-2 gap-3 text-xs text-slate-400">
-          <MetricLine icon={Cpu} label="CPU" value={`${service.metrics.cpu}%`} accent="from-sky-400 to-emerald-400" />
-          <MetricLine icon={MemoryStick} label="内存" value={`${service.metrics.memory}%`} accent="from-violet-400 to-sky-400" />
-          <MetricLine icon={Database} label="端口" value={service.metrics.port} accent="from-amber-400 to-orange-400" />
-          <MetricLine icon={Clock} label="运行时间" value={service.metrics.uptime} accent="from-slate-200/90 to-slate-50/90" />
+        <div className="grid gap-3 text-xs text-slate-400 md:grid-cols-2">
+          <MetricLine
+            icon={Cpu}
+            label="CPU"
+            value={`${service.metrics.cpu}%`}
+            percent={service.metrics.cpu}
+            accent="from-sky-400 to-emerald-400"
+          />
+          <MetricLine
+            icon={MemoryStick}
+            label="内存"
+            value={`${service.metrics.memory}%`}
+            percent={service.metrics.memory}
+            accent="from-violet-400 to-sky-400"
+          />
         </div>
 
         <div className="mt-2 flex items-center justify-between gap-2 text-xs">
@@ -147,26 +168,25 @@ export function ServiceCard({ service, onToggle, onOpenModule, onViewLogs }: Ser
                 </>
               )}
             </Button>
-            {service.status === 'running' && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="px-2 text-[11px]"
-                onClick={() => onOpenModule(service.key)}
-              >
-                <ExternalLink className="mr-1 h-3 w-3" />
-                打开
-              </Button>
-            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="px-2 text-[11px] text-slate-500"
+              onClick={() => onViewLogs(service.key)}
+            >
+              <FileText className="mr-1 h-3 w-3" />
+              查看日志
+            </Button>
           </div>
           <Button
             size="sm"
-            variant="ghost"
-            className="px-2 text-[11px] text-slate-500"
-            onClick={() => onViewLogs(service.key)}
+            shine
+            className="px-3 text-[11px] bg-gradient-to-r from-sky-500 to-sky-400 text-white shadow-md shadow-sky-300/70 hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-60"
+            disabled={service.status !== 'running'}
+            onClick={() => onOpenModule(service.key)}
           >
-            <FileText className="mr-1 h-3 w-3" />
-            查看日志
+            <ExternalLink className="mr-1 h-3 w-3" />
+            打开
           </Button>
         </div>
       </CardContent>

@@ -1,6 +1,7 @@
 import { app, ipcMain, shell } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
+import { getLogsDir } from './app-paths.js'
 import http from 'node:http'
 import si from 'systeminformation'
 import {
@@ -877,8 +878,7 @@ export function setupIpcHandlers() {
     const all = await collectAllLogsForQuery(moduleFilter, levelFilter, startTime, endTime)
 
     try {
-      const userDataDir = app.getPath('userData')
-      const logsDir = path.join(userDataDir, 'logs')
+      const logsDir = getLogsDir()
       fs.mkdirSync(logsDir, { recursive: true })
 
       const now = new Date()

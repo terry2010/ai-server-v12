@@ -1,6 +1,6 @@
-import { app } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
+import { getSettingsFilePath } from './app-paths.js'
 import crypto from 'node:crypto'
 
 /** @type {import('../shared/types').AppSettings} */
@@ -52,11 +52,6 @@ const defaultAppSettings = {
 }
 
 let appSettings = defaultAppSettings
-
-function getSettingsFilePath() {
-  const userDataDir = app.getPath('userData')
-  return path.join(userDataDir, 'settings.json')
-}
 
 function loadSettingsFromDisk() {
   try {

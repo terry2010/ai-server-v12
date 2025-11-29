@@ -326,6 +326,11 @@ export function ModuleSettings({
 
     const handleRestoreData = async () => {
       if (restoreLoading) return
+      const confirmed = window.confirm(
+        '此操作会使用所选备份覆盖当前 n8n 数据库中的所有数据，可能导致现有数据不可恢复。确定要继续吗？',
+      )
+      if (!confirmed) return
+
       setRestoreLoading(true)
       try {
         const result = await window.api.restoreModuleData('n8n')
@@ -913,6 +918,11 @@ export function ModuleSettings({
 
     const handleRestoreData = async () => {
       if (restoreLoading) return
+      const confirmed = window.confirm(
+        '此操作会使用所选备份覆盖当前 OneAPI 数据库中的所有数据，可能导致现有数据不可恢复。确定要继续吗？',
+      )
+      if (!confirmed) return
+
       setRestoreLoading(true)
       try {
         const result = await window.api.restoreModuleData('oneapi')

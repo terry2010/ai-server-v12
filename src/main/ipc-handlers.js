@@ -285,6 +285,337 @@ async function backupOneApiDatabaseToFile(filePath) {
   }
 }
 
+async function restoreN8nDatabaseFromFile(filePath) {
+  const dbResult = await ensureN8nPostgres()
+  if (!dbResult || !dbResult.success || !dbResult.dbConfig) {
+    const message = (dbResult && dbResult.error) || '准备 n8n 依赖的数据库失败。'
+    throw new Error(message)
+  }
+
+  const docker = getDockerClient()
+  const container = docker.getContainer(N8N_DB_CONTAINER_NAME)
+
+  const dbConfig = dbResult.dbConfig
+  const user = dbConfig.user || 'n8n'
+  const database = dbConfig.database || 'n8n'
+  const password = dbConfig.password || ''
+
+  const quotedDb = String(database).replace(/"/g, '""')
+  const quotedUser = String(user).replace(/"/g, '""')
+  const dropSql = `DROP DATABASE IF EXISTS "${quotedDb}";`
+  const createSql = `CREATE DATABASE "${quotedDb}" OWNER "${quotedUser}";`
+
+  // 第一步：在 postgres 系统库中删除旧数据库（如果存在）
+  {
+    const exec = await container.exec({
+      Cmd: ['psql', '-U', user, '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-c', dropSql],
+      Env: [`PGPASSWORD=${password}`],
+      AttachStdout: true,
+      AttachStderr: true,
+    })
+
+    const stream = await exec.start({ hijack: true, stdin: false })
+
+    let output = ''
+    stream.on('data', (chunk) => {
+      try {
+        if (!chunk) return
+        if (Buffer.isBuffer(chunk)) {
+          output += chunk.toString('utf-8')
+        } else {
+          output += String(chunk)
+        }
+      } catch {}
+    })
+
+    const dropTimeoutMs = 60 * 1000
+    await new Promise((resolve, reject) => {
+      let finished = false
+      const done = () => {
+        if (finished) return
+        finished = true
+        resolve()
+      }
+      const fail = (err) => {
+        if (finished) return
+        finished = true
+        reject(err)
+      }
+
+      stream.on('end', done)
+      stream.on('close', done)
+      stream.on('error', fail)
+
+      setTimeout(() => {
+        if (finished) return
+        finished = true
+        fail(new Error('n8n 数据库删除超时，请稍后重试。'))
+      }, dropTimeoutMs)
+    })
+
+    const inspect = await exec.inspect()
+    if (typeof inspect.ExitCode === 'number' && inspect.ExitCode !== 0) {
+      const tail = output ? output.replace(/\s+$/g, '').slice(-500) : ''
+      const message =
+        tail || `n8n 数据库删除失败（退出码 ${inspect.ExitCode}）。`
+      throw new Error(message)
+    }
+  }
+
+  // 第二步：创建新的目标数据库
+  {
+    const exec = await container.exec({
+      Cmd: ['psql', '-U', user, '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-c', createSql],
+      Env: [`PGPASSWORD=${password}`],
+      AttachStdout: true,
+      AttachStderr: true,
+    })
+
+    const stream = await exec.start({ hijack: true, stdin: false })
+
+    let output = ''
+    stream.on('data', (chunk) => {
+      try {
+        if (!chunk) return
+        if (Buffer.isBuffer(chunk)) {
+          output += chunk.toString('utf-8')
+        } else {
+          output += String(chunk)
+        }
+      } catch {}
+    })
+
+    const createTimeoutMs = 60 * 1000
+    await new Promise((resolve, reject) => {
+      let finished = false
+      const done = () => {
+        if (finished) return
+        finished = true
+        resolve()
+      }
+      const fail = (err) => {
+        if (finished) return
+        finished = true
+        reject(err)
+      }
+
+      stream.on('end', done)
+      stream.on('close', done)
+      stream.on('error', fail)
+
+      setTimeout(() => {
+        if (finished) return
+        finished = true
+        fail(new Error('n8n 数据库创建超时，请稍后重试。'))
+      }, createTimeoutMs)
+    })
+
+    const inspect = await exec.inspect()
+    if (typeof inspect.ExitCode === 'number' && inspect.ExitCode !== 0) {
+      const tail = output ? output.replace(/\s+$/g, '').slice(-500) : ''
+      const message =
+        tail || `n8n 数据库创建失败（退出码 ${inspect.ExitCode}）。`
+      throw new Error(message)
+    }
+  }
+
+  // 第二步：将备份 SQL 导入新建的数据库
+  const sqlBuffer = await fs.promises.readFile(filePath)
+
+  const execImport = await container.exec({
+    Cmd: ['psql', '-U', user, '-d', database, '-v', 'ON_ERROR_STOP=1'],
+    Env: [`PGPASSWORD=${password}`],
+    AttachStdin: true,
+    AttachStdout: true,
+    AttachStderr: true,
+  })
+
+  const importStream = await execImport.start({ hijack: true, stdin: true })
+
+  let importOutput = ''
+  importStream.on('data', (chunk) => {
+    try {
+      if (!chunk) return
+      if (Buffer.isBuffer(chunk)) {
+        importOutput += chunk.toString('utf-8')
+      } else {
+        importOutput += String(chunk)
+      }
+    } catch {}
+  })
+
+  // 将备份内容通过 stdin 写入 psql
+  importStream.write(sqlBuffer)
+  importStream.end()
+
+  const importTimeoutMs = 10 * 60 * 1000
+  await new Promise((resolve, reject) => {
+    let finished = false
+    const done = () => {
+      if (finished) return
+      finished = true
+      resolve()
+    }
+    const fail = (err) => {
+      if (finished) return
+      finished = true
+      reject(err)
+    }
+
+    importStream.on('end', done)
+    importStream.on('close', done)
+    importStream.on('error', fail)
+
+    setTimeout(() => {
+      if (finished) return
+      finished = true
+      fail(new Error('n8n 数据库导入超时，请稍后重试。'))
+    }, importTimeoutMs)
+  })
+
+  const inspectImport = await execImport.inspect()
+  if (typeof inspectImport.ExitCode === 'number' && inspectImport.ExitCode !== 0) {
+    const tail = importOutput ? importOutput.replace(/\s+$/g, '').slice(-500) : ''
+    const message =
+      tail || `n8n 数据库恢复失败（退出码 ${inspectImport.ExitCode}）。`
+    throw new Error(message)
+  }
+}
+
+async function restoreOneApiDatabaseFromFile(filePath) {
+  const dbInstanceResult = await ensureOneApiMysql()
+  if (!dbInstanceResult || !dbInstanceResult.success || !dbInstanceResult.dbConfig) {
+    const message = (dbInstanceResult && dbInstanceResult.error) || '准备 OneAPI 依赖的 MySQL 实例失败。'
+    throw new Error(message)
+  }
+
+  const adminConfig = dbInstanceResult.dbConfig
+  const docker = getDockerClient()
+  const container = docker.getContainer(MYSQL_DB_CONTAINER_NAME)
+
+  const user = adminConfig.user || 'root'
+  const password = adminConfig.password || ''
+  const dbName = adminConfig.database || 'oneapi'
+
+  // 第一步：重建 oneapi 数据库
+  {
+    const ddlSql = `DROP DATABASE IF EXISTS \`${dbName}\`; CREATE DATABASE \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
+
+    const exec = await container.exec({
+      Cmd: ['mysql', `-u${user}`, `-p${password}`, '-e', ddlSql],
+      AttachStdout: true,
+      AttachStderr: true,
+    })
+
+    const stream = await exec.start({ hijack: true, stdin: false })
+
+    let output = ''
+    stream.on('data', (chunk) => {
+      try {
+        if (!chunk) return
+        if (Buffer.isBuffer(chunk)) {
+          output += chunk.toString('utf-8')
+        } else {
+          output += String(chunk)
+        }
+      } catch {}
+    })
+
+    const rebuildTimeoutMs = 60 * 1000
+    await new Promise((resolve, reject) => {
+      let finished = false
+      const done = () => {
+        if (finished) return
+        finished = true
+        resolve()
+      }
+      const fail = (err) => {
+        if (finished) return
+        finished = true
+        reject(err)
+      }
+
+      stream.on('end', done)
+      stream.on('close', done)
+      stream.on('error', fail)
+
+      setTimeout(() => {
+        if (finished) return
+        finished = true
+        fail(new Error('OneAPI 数据库重建超时，请稍后重试。'))
+      }, rebuildTimeoutMs)
+    })
+
+    const inspect = await exec.inspect()
+    if (typeof inspect.ExitCode === 'number' && inspect.ExitCode !== 0) {
+      const tail = output ? output.replace(/\s+$/g, '').slice(-500) : ''
+      const message =
+        tail || `OneAPI 数据库重建失败（退出码 ${inspect.ExitCode}）。`
+      throw new Error(message)
+    }
+  }
+
+  // 第二步：将备份 SQL 导入新建的 oneapi 数据库
+  const sqlBuffer = await fs.promises.readFile(filePath)
+
+  const execImport = await container.exec({
+    Cmd: ['mysql', `-u${user}`, `-p${password}`, dbName],
+    AttachStdin: true,
+    AttachStdout: true,
+    AttachStderr: true,
+  })
+
+  const importStream = await execImport.start({ hijack: true, stdin: true })
+
+  let importOutput = ''
+  importStream.on('data', (chunk) => {
+    try {
+      if (!chunk) return
+      if (Buffer.isBuffer(chunk)) {
+        importOutput += chunk.toString('utf-8')
+      } else {
+        importOutput += String(chunk)
+      }
+    } catch {}
+  })
+
+  importStream.write(sqlBuffer)
+  importStream.end()
+
+  const importTimeoutMs = 10 * 60 * 1000
+  await new Promise((resolve, reject) => {
+    let finished = false
+    const done = () => {
+      if (finished) return
+      finished = true
+      resolve()
+    }
+    const fail = (err) => {
+      if (finished) return
+      finished = true
+      reject(err)
+    }
+
+    importStream.on('end', done)
+    importStream.on('close', done)
+    importStream.on('error', fail)
+
+    setTimeout(() => {
+      if (finished) return
+      finished = true
+      fail(new Error('OneAPI 数据库导入超时，请稍后重试。'))
+    }, importTimeoutMs)
+  })
+
+  const inspectImport = await execImport.inspect()
+  if (typeof inspectImport.ExitCode === 'number' && inspectImport.ExitCode !== 0) {
+    const tail = importOutput ? importOutput.replace(/\s+$/g, '').slice(-500) : ''
+    const message =
+      tail || `OneAPI 数据库恢复失败（退出码 ${inspectImport.ExitCode}）。`
+    throw new Error(message)
+  }
+}
+
 async function checkRagflowHttpHealthy(port) {
   return new Promise((resolve) => {
     if (!port || typeof port !== 'number') {
@@ -776,10 +1107,106 @@ export function setupIpcHandlers() {
     }
   })
 
-  ipcMain.handle('modules:restoreData', async () => {
-    return {
-      success: false,
-      error: '当前版本暂未实现数据恢复功能，请等待后续更新。',
+  ipcMain.handle('modules:restoreData', async (_event, payload) => {
+    const moduleId =
+      payload && typeof payload.moduleId === 'string' ? payload.moduleId : undefined
+
+    if (!moduleId) {
+      return { success: false, error: '模块 ID 无效，无法执行恢复。' }
+    }
+
+    const dockerStatus = await detectDockerStatus()
+    if (!dockerStatus.installed || !dockerStatus.running) {
+      return {
+        success: false,
+        error: dockerStatus.error || 'Docker 未安装或未运行，无法执行数据恢复。',
+      }
+    }
+
+    // 恢复前确保对应业务模块未在运行，避免运行时占用数据库导致不一致
+    try {
+      const config = moduleDockerConfig[moduleId]
+      if (config) {
+        const docker = getDockerClient()
+        const containers = await docker.listContainers({
+          all: true,
+          filters: {
+            name: config.containerNames,
+          },
+        })
+
+        const hasRunning = containers.some((info) => {
+          const state = String(info.State || '').toLowerCase()
+          return state === 'running' || state === 'restarting'
+        })
+
+        if (hasRunning) {
+          const friendlyName = moduleId === 'n8n' ? 'n8n' : moduleId === 'oneapi' ? 'OneAPI' : moduleId
+          return {
+            success: false,
+            error: `${friendlyName} 模块正在运行，无法执行数据恢复。请先在首页停止该模块后重试。`,
+          }
+        }
+      }
+    } catch {
+      // 如果状态检查失败，不阻止恢复，由后续步骤决定是否报错
+    }
+
+    let defaultDir = ''
+    try {
+      defaultDir = app.getPath('documents')
+    } catch {
+      try {
+        defaultDir = app.getPath('downloads')
+      } catch {
+        defaultDir = ''
+      }
+    }
+
+    const dialogResult = await dialog.showOpenDialog({
+      title: '选择要恢复的备份文件',
+      defaultPath: defaultDir || undefined,
+      filters: [
+        { name: '数据库备份文件', extensions: ['sql'] },
+        { name: '所有文件', extensions: ['*'] },
+      ],
+      properties: ['openFile'],
+    })
+
+    if (dialogResult.canceled || !dialogResult.filePaths || !dialogResult.filePaths[0]) {
+      return { success: false, cancelled: true }
+    }
+
+    const filePath = dialogResult.filePaths[0]
+
+    try {
+      const stats = await fs.promises.stat(filePath)
+      if (!stats || !stats.size) {
+        return { success: false, error: '选中的备份文件为空，请确认文件是否正确。' }
+      }
+
+      if (moduleId === 'n8n') {
+        await restoreN8nDatabaseFromFile(filePath)
+      } else if (moduleId === 'oneapi') {
+        await restoreOneApiDatabaseFromFile(filePath)
+      } else {
+        return { success: false, error: '当前版本暂不支持该模块的数据恢复。' }
+      }
+
+      return { success: true }
+    } catch (error) {
+      const message = error && error.message ? error.message : String(error)
+      try {
+        // 输出详细错误日志便于排查
+        // eslint-disable-next-line no-console
+        console.error('[restore] modules:restoreData 失败', {
+          moduleId,
+          filePath,
+          error: message,
+        })
+      } catch {}
+
+      return { success: false, error: message }
     }
   })
 

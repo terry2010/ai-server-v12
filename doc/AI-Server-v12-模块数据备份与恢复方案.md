@@ -388,3 +388,13 @@ restoreModuleData(moduleId: ModuleId): Promise<{ success: boolean; error?: strin
 - 需要考虑 Windows 环境下 Docker CLI、路径映射与权限问题；
 - MinIO 与 ES 的导入导出实现细节依赖具体镜像与版本，落地时需在测试环境中反复验证；
 - 所有危险操作（`DROP DATABASE`、删除 ES 索引、清空 MinIO bucket）必须在用户二次确认后执行，并在日志中记录。
+
+## 7. 当前开发进度
+
+- n8n / OneAPI：
+  - 已完成 IPC 契约（`modules:backupData` / `modules:restoreData`）、`window.api` 暴露以及主进程备份 / 恢复处理逻辑；
+  - 系统设置页已接入「备份数据 / 恢复备份」按钮，并与上述 IPC 全量打通；
+  - **数据库恢复功能在代码层面已实现且预期可用，但目前仅做了有限的人工验证，尚未经过系统性测试**（包括空库、已运行一段时间后的数据恢复等场景），后续需要补充完整测试用例。
+- Dify / RagFlow：
+  - 备份与恢复方案（包含 DB + MinIO + ES）已在本文中完成设计，尚未在代码中落地实现；
+  - 预计在完成 n8n / OneAPI 功能验证后，按阶段 C / D 的规划逐步实现并补充测试.

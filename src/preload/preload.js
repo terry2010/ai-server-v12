@@ -95,4 +95,10 @@ const api = {
     }),
 }
 
+ipcRenderer.on('browserView:backToModules', () => {
+  try {
+    window.dispatchEvent(new Event('browserViewBackToModules'))
+  } catch {}
+})
+
 contextBridge.exposeInMainWorld('api', api)

@@ -338,6 +338,18 @@ export function AppLayout() {
   }, [currentModuleId])
 
   useEffect(() => {
+    const handler = () => {
+      navigate('/')
+    }
+
+    window.addEventListener('browserViewBackToModules', handler as EventListener)
+
+    return () => {
+      window.removeEventListener('browserViewBackToModules', handler as EventListener)
+    }
+  }, [navigate])
+
+  useEffect(() => {
     const prevExpanded = prevModuleTabsExpandedRef.current
     const justExpanded = !prevExpanded && moduleTabsExpanded
     prevModuleTabsExpandedRef.current = moduleTabsExpanded

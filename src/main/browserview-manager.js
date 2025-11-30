@@ -2,6 +2,7 @@ import { BrowserView } from 'electron'
 import { defaultAppSettings, getAppSettings, isVerboseLoggingEnabled } from './app-settings.js'
 import { detectDockerStatus, getDockerClient } from './docker-client.js'
 import { moduleDockerConfig } from './config.js'
+import { attachBrowserViewContextMenu } from './browserview-context-menu.js'
 
 let mainWindow = null
 const HEADER_HEIGHT = 56
@@ -129,6 +130,14 @@ async function runBrowserViewGcOnce() {
     } catch {}
 
     try {
+      if (typeof entry.contextMenuDispose === 'function') {
+        try {
+          entry.contextMenuDispose()
+        } catch {}
+      }
+    } catch {}
+
+    try {
       entry.view.destroy()
     } catch {}
 
@@ -194,9 +203,39 @@ export async function openModuleBrowserView(rawModuleId) {
 
   if (!entry) {
     const view = new BrowserView({ webPreferences: { nodeIntegration: false, contextIsolation: true } })
-    entry = { moduleId, view, lastActiveAt: Date.now() }
+    entry = { moduleId, view, lastActiveAt: Date.now(), contextMenuDispose: null }
     moduleViews[moduleId] = entry
     setupViewEvents(entry, homeUrl)
+    try {
+      if (typeof entry.contextMenuDispose === 'function') {
+        try {
+          entry.contextMenuDispose()
+        } catch {}
+      }
+    } catch {}
+
+    try {
+      entry.contextMenuDispose = attachBrowserViewContextMenu({
+        webContents: view.webContents,
+        getBackLabel: () => {
+          try {
+            const settings = getAppSettings() || defaultAppSettings
+            const rawName = settings && typeof settings.systemName === 'string' ? settings.systemName : ''
+            const name = rawName && rawName.trim() ? rawName.trim() : 'AI-Server'
+            return `返回${name}首页`
+          } catch {
+            return '返回AI-Server首页'
+          }
+        },
+        onBackToModules: () => {
+          try {
+            if (mainWindow && mainWindow.webContents) {
+              mainWindow.webContents.send('browserView:backToModules')
+            }
+          } catch {}
+        },
+      })
+    } catch {}
     try {
       await view.webContents.loadURL(homeUrl)
     } catch (error) {

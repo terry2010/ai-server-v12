@@ -12,6 +12,7 @@ import {
   mergeAppSettings,
   saveSettingsToDisk,
 } from './app-settings.js'
+import { startBrowserAgentServer, stopBrowserAgentServer } from './browser-agent-server.js'
 import {
   modules,
   moduleDockerConfig,
@@ -1856,9 +1857,24 @@ export function setupIpcHandlers() {
   })
 
   ipcMain.handle('settings:update', async (_event, patch) => {
+    const previous = appSettings
     appSettings = mergeAppSettings(appSettings, patch)
     saveSettingsToDisk(appSettings)
     setAppSettings(appSettings)
+
+    try {
+      const prevAgent = previous && previous.browserAgent
+      const nextAgent = appSettings && appSettings.browserAgent
+      const prevEnabled = !!(prevAgent && typeof prevAgent.enabled === 'boolean' ? prevAgent.enabled : false)
+      const nextEnabled = !!(nextAgent && typeof nextAgent.enabled === 'boolean' ? nextAgent.enabled : false)
+
+      if (!prevEnabled && nextEnabled) {
+        startBrowserAgentServer()
+      } else if (prevEnabled && !nextEnabled) {
+        stopBrowserAgentServer()
+      }
+    } catch {}
+
     return appSettings
   })
 }

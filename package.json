@@ -23,6 +23,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "dockerode": "^3.3.5",
+    "playwright-core": "^1.48.0",
     "lucide-react": "^0.453.0",
     "systeminformation": "^5.23.7",
     "react": "^18.3.1",

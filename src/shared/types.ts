@@ -95,6 +95,13 @@ export interface ModuleSettings {
   env: Record<string, string>
 }
 
+export interface BrowserAgentSettings {
+  enabled: boolean
+  port: number
+  token?: string
+  dataRoot?: string
+}
+
 export interface AppSettings {
   systemName: string
   language: LanguageSetting
@@ -103,4 +110,5 @@ export interface AppSettings {
   docker: DockerSettings
   debug: DebugSettings
   modules: Record<ModuleId, ModuleSettings>
+  browserAgent?: BrowserAgentSettings
 }

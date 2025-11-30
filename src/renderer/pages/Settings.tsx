@@ -20,11 +20,13 @@ import { SystemSettings as SystemSettingsPanel } from './settings/SystemSettings
 import { NetworkSettings as NetworkSettingsPanel } from './settings/NetworkSettings'
 import { ModuleSettings as ModuleSettingsPanel } from './settings/ModuleSettings'
 import { DebugSettings } from './settings/DebugSettings'
+import { BrowserAgentSettings as BrowserAgentSettingsPanel } from './settings/BrowserAgentSettings'
 import { Field } from './settings/Field'
 
 const tabs = [
   { key: 'system', label: '系统设置', icon: SlidersHorizontal },
   { key: 'network', label: '网络设置', icon: Network },
+  { key: 'agent', label: 'Agent 设置', icon: Terminal },
   { key: 'n8n', label: 'n8n 设置', icon: Terminal },
   { key: 'dify', label: 'Dify 设置', icon: Terminal },
   { key: 'oneapi', label: 'OneAPI 设置', icon: Terminal },
@@ -198,6 +200,15 @@ export function SettingsPage() {
       <div className="space-y-4 pt-1 md:pl-2">
         {activeTab === 'system' && (
           <SystemSettingsPanel
+            settings={settings}
+            loading={loading}
+            saving={saving}
+            onChange={handleLocalChange}
+            onSave={handleSave}
+          />
+        )}
+        {activeTab === 'agent' && (
+          <BrowserAgentSettingsPanel
             settings={settings}
             loading={loading}
             saving={saving}

@@ -49,6 +49,12 @@ const defaultAppSettings = {
     showSystemNameSetting: true,
     browserViewIdleDestroyMinutes: 1,
   },
+  browserAgent: {
+    enabled: false,
+    port: 26080,
+    token: '',
+    dataRoot: '',
+  },
 }
 
 let appSettings = defaultAppSettings
@@ -96,6 +102,10 @@ function mergeAppSettings(base, patch) {
     modules: {
       ...base.modules,
       ...(safePatch.modules || {}),
+    },
+    browserAgent: {
+      ...(base.browserAgent || {}),
+      ...(safePatch.browserAgent || {}),
     },
   }
 }

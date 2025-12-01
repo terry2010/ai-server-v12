@@ -250,9 +250,38 @@ export async function navigateOnce(params) {
       rawTimeout && Number.isFinite(rawTimeout) && rawTimeout > 0 ? rawTimeout : 30000
 
     if (waitUntil) {
-      await targetPage.waitForLoadState(waitUntil, { timeout: timeoutMs }).catch((error) => {
-        throw error
-      })
+      await targetPage
+        .waitForLoadState(waitUntil, { timeout: timeoutMs })
+        .catch((error) => {
+          try {
+            const classified = classifyNetworkError(error, {
+              action: 'navigate',
+              url: targetUrl,
+            })
+            if (classified && classified.baCode) {
+              // @ts-ignore
+              error.baCode = classified.baCode
+              // @ts-ignore
+              error.baDetails = classified.baDetails
+            }
+          } catch {}
+          throw error
+        })
+    }
+
+    const antiBot = await detectAntiBotPage(targetPage).catch(() => null)
+    if (antiBot && antiBot.isAntiBot) {
+      const err = new Error(antiBot.message || 'Anti-bot or verification page detected')
+      err.name = 'ANTI_BOT_PAGE'
+      err.baCode = 'ANTI_BOT_PAGE'
+      err.baDetails = {
+        url: antiBot.url || null,
+        title: antiBot.title || null,
+        snippet: antiBot.snippet || null,
+        ruleType: antiBot.ruleType || null,
+        ruleKeyword: antiBot.ruleKeyword || null,
+      }
+      throw err
     }
 
     const title = await targetPage.title().catch(() => '')
@@ -1329,7 +1358,28 @@ export async function waitForSelectorAction(params) {
 
   try {
     const locator = page.locator(selector)
-    await locator.waitFor({ state, timeout: timeoutMs })
+    await locator.waitFor({ state, timeout: timeoutMs }).catch((error) => {
+      try {
+        const currentUrl = (() => {
+          try {
+            return page.url()
+          } catch {
+            return ''
+          }
+        })()
+        const classified = classifyNetworkError(error, {
+          action: 'wait.selector',
+          url: currentUrl,
+        })
+        if (classified && classified.baCode) {
+          // @ts-ignore
+          error.baCode = classified.baCode
+          // @ts-ignore
+          error.baDetails = classified.baDetails
+        }
+      } catch {}
+      throw error
+    })
 
     const title = await page.title().catch(() => '')
     const finalUrl = page.url()
@@ -1384,36 +1434,82 @@ export async function waitForTextAction(params) {
 
   try {
     if (scope === 'page') {
-      await page.waitForFunction(
-        (needle) => {
+      await page
+        .waitForFunction(
+          (needle) => {
+            try {
+              const root = document.body || document.documentElement
+              if (!root) return false
+              const value = root.innerText || root.textContent || ''
+              return typeof value === 'string' && value.includes(needle)
+            } catch {
+              return false
+            }
+          },
+          text,
+          { timeout: timeoutMs },
+        )
+        .catch((error) => {
           try {
-            const root = document.body || document.documentElement
-            if (!root) return false
-            const value = root.innerText || root.textContent || ''
-            return typeof value === 'string' && value.includes(needle)
-          } catch {
-            return false
-          }
-        },
-        text,
-        { timeout: timeoutMs },
-      )
+            const currentUrl = (() => {
+              try {
+                return page.url()
+              } catch {
+                return ''
+              }
+            })()
+            const classified = classifyNetworkError(error, {
+              action: 'wait.text',
+              url: currentUrl,
+            })
+            if (classified && classified.baCode) {
+              // @ts-ignore
+              error.baCode = classified.baCode
+              // @ts-ignore
+              error.baDetails = classified.baDetails
+            }
+          } catch {}
+          throw error
+        })
     } else {
-      await page.waitForFunction(
-        (arg) => {
-          const { selector: sel, needle } = arg
+      await page
+        .waitForFunction(
+          (arg) => {
+            const { selector: sel, needle } = arg
+            try {
+              const el = document.querySelector(sel)
+              if (!el) return false
+              const value = el.innerText || el.textContent || ''
+              return typeof value === 'string' && value.includes(needle)
+            } catch {
+              return false
+            }
+          },
+          { selector, needle: text },
+          { timeout: timeoutMs },
+        )
+        .catch((error) => {
           try {
-            const el = document.querySelector(sel)
-            if (!el) return false
-            const value = el.innerText || el.textContent || ''
-            return typeof value === 'string' && value.includes(needle)
-          } catch {
-            return false
-          }
-        },
-        { selector, needle: text },
-        { timeout: timeoutMs },
-      )
+            const currentUrl = (() => {
+              try {
+                return page.url()
+              } catch {
+                return ''
+              }
+            })()
+            const classified = classifyNetworkError(error, {
+              action: 'wait.text',
+              url: currentUrl,
+            })
+            if (classified && classified.baCode) {
+              // @ts-ignore
+              error.baCode = classified.baCode
+              // @ts-ignore
+              error.baDetails = classified.baDetails
+            }
+          } catch {}
+          throw error
+        })
     }
 
     const title = await page.title().catch(() => '')
@@ -1463,21 +1559,44 @@ export async function waitForUrlAction(params) {
   const { browser, page } = await getPageForSession(sessionId)
 
   try {
-    await page.waitForFunction(
-      (arg) => {
-        const { contains: c, equals: e } = arg
+    await page
+      .waitForFunction(
+        (arg) => {
+          const { contains: c, equals: e } = arg
+          try {
+            const url = window.location.href || ''
+            if (e && url === e) return true
+            if (c && url.includes(c)) return true
+            return false
+          } catch {
+            return false
+          }
+        },
+        { contains, equals },
+        { timeout: timeoutMs },
+      )
+      .catch((error) => {
         try {
-          const url = window.location.href || ''
-          if (e && url === e) return true
-          if (c && url.includes(c)) return true
-          return false
-        } catch {
-          return false
-        }
-      },
-      { contains, equals },
-      { timeout: timeoutMs },
-    )
+          const currentUrl = (() => {
+            try {
+              return page.url()
+            } catch {
+              return ''
+            }
+          })()
+          const classified = classifyNetworkError(error, {
+            action: 'wait.url',
+            url: currentUrl,
+          })
+          if (classified && classified.baCode) {
+            // @ts-ignore
+            error.baCode = classified.baCode
+            // @ts-ignore
+            error.baDetails = classified.baDetails
+          }
+        } catch {}
+        throw error
+      })
 
     const title = await page.title().catch(() => '')
     const finalUrl = page.url()
@@ -2306,6 +2425,179 @@ export async function domScroll(params) {
   }
 }
 
+function classifyNetworkError(error, info) {
+  if (!error) return null
+
+  const action = info && typeof info.action === 'string' ? info.action : null
+  const url = info && typeof info.url === 'string' ? info.url : null
+  const httpStatusRaw = info && typeof info.httpStatus === 'number' ? info.httpStatus : null
+
+  const name =
+    error && typeof error.name === 'string' && error.name
+      ? error.name
+      : ''
+  const message =
+    error && error.message
+      ? String(error.message)
+      : String(error || '')
+  const lower = message.toLowerCase()
+
+  let baCode = null
+  let netError = null
+  let httpStatus = httpStatusRaw && Number.isFinite(httpStatusRaw) ? httpStatusRaw : null
+
+  if (name === 'TimeoutError' || lower.includes('timeout')) {
+    baCode = 'TIMEOUT'
+  }
+
+  const m = /ERR_[A-Z0-9_:-]+/i.exec(message)
+  if (m && m[0]) {
+    netError = m[0]
+    const upper = netError.toUpperCase()
+    if (upper === 'ERR_NAME_NOT_RESOLVED') {
+      baCode = baCode || 'DNS_ERROR'
+    } else if (
+      upper.startsWith('ERR_SSL') ||
+      upper.startsWith('ERR_CERT')
+    ) {
+      baCode = baCode || 'TLS_ERROR'
+    } else if (
+      upper.includes('CONNECTION') ||
+      upper.includes('ADDRESS_UNREACHABLE') ||
+      upper.includes('NETWORK_CHANGED')
+    ) {
+      baCode = baCode || 'CONNECTION_ERROR'
+    }
+  }
+
+  if (httpStatus && httpStatus >= 400 && httpStatus < 500) {
+    baCode = baCode || 'HTTP_4XX'
+  } else if (httpStatus && httpStatus >= 500 && httpStatus < 600) {
+    baCode = baCode || 'HTTP_5XX'
+  }
+
+  if (!baCode && (netError || httpStatus)) {
+    baCode = 'UNKNOWN_NETWORK_ERROR'
+  }
+
+  if (!baCode) return null
+
+  const baDetails = {
+    action,
+    url,
+    httpStatus: httpStatus || null,
+    errorName: name || null,
+    errorMessage: message || null,
+    netError: netError || null,
+  }
+
+  return { baCode, baDetails }
+}
+
+async function detectAntiBotPage(page) {
+  if (!page) {
+    return null
+  }
+
+  let url = ''
+  let title = ''
+  let text = ''
+
+  try {
+    url = page.url() || ''
+  } catch {
+    url = ''
+  }
+
+  try {
+    title = await page.title()
+  } catch {
+    title = ''
+  }
+
+  try {
+    text = await page.evaluate(() => {
+      try {
+        const root = document.body || document.documentElement
+        if (!root) return ''
+        const value = root.innerText || root.textContent || ''
+        return typeof value === 'string' ? value : ''
+      } catch {
+        return ''
+      }
+    })
+  } catch {
+    text = ''
+  }
+
+  const lowerUrl = url.toLowerCase()
+  const lowerTitle = title.toLowerCase()
+  const lowerText = text.toLowerCase()
+
+  const urlKeywords = [
+    'captcha',
+    'verify',
+    'validation',
+    'sec.douyin',
+    'sec.traffic',
+    'anti-bot',
+    'antibot',
+    'challenge',
+  ]
+  const textKeywords = [
+    '人机验证',
+    '安全验证',
+    '验证您是否为人类',
+    '访问过于频繁',
+    'too many requests',
+    'access denied',
+    'unusual traffic',
+    'robot check',
+    'verify you are human',
+  ]
+
+  let ruleType = null
+  let ruleKeyword = null
+
+  for (const kw of urlKeywords) {
+    if (kw && lowerUrl.includes(kw)) {
+      ruleType = 'url'
+      ruleKeyword = kw
+      break
+    }
+  }
+
+  if (!ruleType) {
+    for (const kw of textKeywords) {
+      if (!kw) continue
+      if (lowerTitle.includes(kw) || lowerText.includes(kw)) {
+        ruleType = 'text'
+        ruleKeyword = kw
+        break
+      }
+    }
+  }
+
+  if (!ruleType) {
+    return {
+      isAntiBot: false,
+      url,
+      title,
+    }
+  }
+
+  const snippet = text && text.length > 0 ? text.slice(0, 512) : ''
+  return {
+    isAntiBot: true,
+    url,
+    title,
+    snippet,
+    ruleType,
+    ruleKeyword,
+    message: 'Anti-bot or verification page detected',
+  }
+}
+
 function isMainAppUrl(url) {
   if (!url || typeof url !== 'string') return false
   if (url.startsWith('http://localhost:5174')) return true
@@ -2326,7 +2618,6 @@ function buildNavigateTargetUrl(rawUrl, sessionId) {
     url.searchParams.set('agent_session', safeId)
     return url.toString()
   } catch {
-    // 若不是合法绝对 URL，则直接附加查询参数
     const hasQuery = rawUrl.includes('?')
     const sep = hasQuery ? '&' : '?'
     return `${rawUrl}${sep}agent_session=${safeId}`

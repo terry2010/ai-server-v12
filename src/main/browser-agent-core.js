@@ -54,6 +54,14 @@ export function listSessions(filter) {
   return result
 }
 
+export function listAllSessions() {
+  const result = []
+  for (const session of sessions.values()) {
+    result.push(session)
+  }
+  return result
+}
+
 export function getSession(sessionId) {
   if (!sessionId) return null
   const s = sessions.get(sessionId)

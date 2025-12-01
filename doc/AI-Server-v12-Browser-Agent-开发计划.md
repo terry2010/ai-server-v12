@@ -112,29 +112,35 @@
   - 返回 `sessionId`。
 
 - `GET /sessions` / `/sessions/{id}`：查询会话状态
-  - 当前 URL、状态（running/idle/completed/failed/timeout）、最近错误等。
+  - 当前 URL、状态（running/idle/completed/failed/timeout）、最近错误等.
 
 - `DELETE /sessions/{id}`：关闭会话
-  - 销毁 BrowserWindow，释放相关 Playwright/page 对象。
+  - 销毁 BrowserWindow，释放相关 Playwright/page 对象.
 
 - 生命周期与超时：
   - 实现 `maxSessionDuration` / `maxIdleDuration`（全局配置 + 每会话可覆盖）；
-  - 超时自动：记录日志 + 最终截图 + 关闭会话。
+  - 超时自动：记录日志 + 最终截图 + 关闭会话.
 
 #### 3.2.4 核心同步动作 API
 
 - 页面导航与等待：
   - `navigate(url, waitUntil, timeoutMs, onTimeout)`；
-  - `waitForSelector` / `waitForText` / `waitForUrlContains`；
-  - 明确超时错误码 + 可选 onTimeout 行为（如截图 + 记录）。
+  - `waitForSelector(selector, state, timeoutMs, onTimeout)` / `waitForText(text, scope, selector, timeoutMs, onTimeout)` / `waitForUrl` / `waitForUrlContains`；
+  - 明确超时错误码 + 可选 onTimeout 行为（v1 实现仅支持 `none` / `screenshot_only`，其余枚举预留为后续扩展）。
 
-- DOM 级交互：
+- DOM 级交互与表单操作：
   - `click(selector)`、`fill(selector, text)`、`scrollIntoView(selector)`；
+  - `setCheckbox(selector, checked)`、`setRadio(selector)`、`selectOptions(selector, values/labels/indexes)`；
+  - `uploadFile(selector, files)`；
+  - `getFormData(formSelector)`、`getValue(selector)`、`isDisabled(selector)` 等；
   - 支持简单的输入节奏控制与 basic 错误处理（selector 不存在 / 不可见等）。
+
+- 页面滚动（带速度抖动）：
+  - `scroll(mode, targetY/deltaY/selector, durationMs, jitter...)`：按给定时间和随机抖动分段滚动，模拟人工滚动行为.
 
 - 坐标级交互：
   - `clickPoint(x, y)`；
-  - `dragPath(path[{x,y,tMs}])`：满足滑块验证码等复杂行为的基本需要。
+  - `dragPath(path[{x,y,tMs}])`：满足滑块验证码等复杂行为的基本需要.
 
 - 截图：
   - 视口 / 元素 / 指定区域；
@@ -143,17 +149,17 @@
 
 - 内容提取（基础版）：
   - `getHtml()`、`getText(scope/page or selector)`；
-  - `extractTable(selector)`：简单结构化表格为二维数组或对象数组。
+  - `extractTable(selector)`：简单结构化表格为二维数组或对象数组.
 
 - 文件下载管理（基础版）：
   - 拦截下载，保存到 `data/browser-agent/{sessionId}/files`；
-  - `listFiles(sessionId)` + `getFile(fileId)` 接口。
+  - `listFiles(sessionId)` + `getFile(fileId)` 接口.
 
 #### 3.2.5 日志与元数据
 
 - 文本日志（类似 main 日志）：
-  - 每个 HTTP 调用记录一行：时间戳、sessionId、client（本机）、动作类型、入参摘要、结果、错误。
-  - 日志文件按日期滚动，配置最大大小与保留天数。
+  - 每个 HTTP 调用记录一行：时间戳、sessionId、client（本机）、动作类型、入参摘要、结果、错误.
+  - 日志文件按日期滚动，配置最大大小与保留天数.
 
 - 结构化元数据（v1）：
   - 不引入 SQLite 等本地数据库，优先采用“纯文本 + JSON/NDJSON 文件 + 简单索引”的方案：
@@ -161,45 +167,45 @@
     - `actions.ndjson`：每行一个动作记录，包含 sessionId、actionType、params、时间戳、结果等；
     - `files.ndjson` / `snapshots.ndjson`：文件与截图元数据；
   - 通过内存索引或简单的倒排索引文件（例如按日期 / clientId / profile 分片的索引）支撑常见查询和 UI 过滤；
-  - 设计 JSON 结构时尽量靠近关系型表结构，以便未来如需迁移到 PgSQL / MySQL，只需实现一次性导入脚本即可。
+  - 设计 JSON 结构时尽量靠近关系型表结构，以便未来如需迁移到 PgSQL / MySQL，只需实现一次性导入脚本即可.
 
 - 为“导出 / 导入 + 回放”预留字段：
   - 确保 actions 中记录足够信息（type、params、时间序列）可在后续阶段回放；
-  - 文本日志主要用于人工阅读，回放更依赖 `browser_actions` 等结构化表。
+  - 文本日志主要用于人工阅读，回放更依赖 `browser_actions` 等结构化表.
 
 #### 3.2.6 AI 浏览器前端 UI（完整）
 
 - 总览页：
   - Agent 启用状态、端口、最大并发、当前 session 数 / 历史任务总数；
-  - 快捷入口：打开配置、清理空闲会话等。
+  - 快捷入口：打开配置、清理空闲会话等.
 
 - 任务列表页：
   - 列表字段：sessionId、profile、状态、开始/结束时间、总耗时、最近错误摘要；
   - 筛选：按时间区间、profile、状态；
-  - 搜索：按任务 ID、错误片段、备注关键字等搜索历史任务。
+  - 搜索：按任务 ID、错误片段、备注关键字等搜索历史任务.
 
 - 任务详情页：
   - 时间线：按顺序展示所有动作（navigate/click/fill/...），包含时间、耗时、结果；
   - 截图区：缩略图预览 + 点击放大；
   - 文件区：列出下载文件（文件名、大小、时间）与操作按钮；
-  - 控制区：打开任务窗口、终止任务、标记为人工介入。
+  - 控制区：打开任务窗口、终止任务、标记为人工介入.
 
-- 历史任务导出 / 导入 + 回放：
+- 历史任务导出 / 导入 + 回放（阶段 1 设计目标，可拆分到后续子阶段实现）：
   - 导出：
     - 支持按筛选条件（时间范围、profile、状态等）导出一批任务数据（sessions + actions + snapshots 元数据引用）为 JSON/NDJSON；
   - 导入：
     - 可以在 UI 中导入导出的任务数据，在“回放模式”下复现时间线与截图；
-    - 回放时不实际操作浏览器，只基于历史动作与截图做可视化重现，用于审计与培训讲解。
+    - 回放时不实际操作浏览器，只基于历史动作与截图做可视化重现，用于审计与培训讲解.
 
 - 调试增强（可视化日志）：
-  - 在任务详情页中展示与该 session 相关的文本日志片段，便于快速排查问题。
+  - 在任务详情页中展示与该 session 相关的文本日志片段，便于快速排查问题.
 
 #### 3.2.7 与本机 n8n 的集成
 
 - 使用 n8n 自带 HTTP Request 节点：
   - 演示创建 session、导航、截图、点击、等待等基本流程；
   - 演示下载文件并在 n8n 中继续处理；
-  - 推荐统一通过「Agent 设置」页中展示的 `http://127.0.0.1:{port}` 作为 Base URL。
+  - 推荐统一通过「Agent 设置」页中展示的 `http://127.0.0.1:{port}` 作为 Base URL.
 
 - 编写简要使用说明：
   - 配置项：Browser Agent 端口、token（在「Agent 设置」页中配置，**阶段 1 实现中 token 仅作预留，不参与鉴权**）；
@@ -213,16 +219,29 @@
       - `POST /sessions/{sessionId}/dom/fill` / `dom/click` 执行表单填写与按钮点击；
       - `POST /sessions/{sessionId}/screenshot` 在关键步骤截取页面；
     - 可通过 n8n 的变量与条件节点编排“登录 → 导出 → 下载文件”等通用流程；
-  - 常见调用模式示例（例如“登录 + 导出文件”通用流程），不含任何真实业务细节。
+  - 常见调用模式示例（例如“登录 + 导出文件”通用流程），不含任何真实业务细节.
 
 ### 3.3 阶段 1 验收标准（建议）
 
 - 能在单机启动 AI-Server，打开 AI 浏览器 tab：
   - 查看正在运行和历史任务；
-  - 搜索历史任务并查看详情（时间线、截图、文件）。
+  - 搜索历史任务并查看详情（时间线、截图、文件）.
 - 能通过本机 n8n HTTP 节点调用 Browser Agent：
-  - 完成至少一条端到端流程（例如：打开某公共网站 → 提取一段文本 → 截图 → 下载简单文件）。
-- 能将某时间段内的任务导出为 JSON，并在另一个环境导入后回放查看。
+  - 完成至少一条端到端流程（例如：打开某公共网站 → 提取一段文本 → 截图 → 下载简单文件）.
+-- （阶段 1 完整版本目标，后续子阶段实现；本轮迭代可暂不实现）能将某时间段内的任务导出为 JSON，并在另一个环境导入后回放查看.
+
+### 3.4 本轮迭代（阶段 1 · 当前开发周期）范围说明
+
+- 【本轮实现】内容提取基础能力：参考 3.2.4 中 `getHtml` / `getText` / `extractTable` 等动作，并通过 HTTP 接口对外暴露.
+- 【本轮实现】坐标级鼠标点击与拖拽：参考 3.2.4 中 `clickPoint` / `dragPath`，补齐对应 HTTP 接口与 Playwright 封装.
+- 【本轮实现】文件下载管理基础版：参考 3.2.4 与 3.2.5 中的设计，实现下载拦截、文件落盘、`files.ndjson` 记录以及前端「文件区」展示.
+- 【本轮实现】会话生命周期与自动清理：参考 3.2.3 中 `maxSessionDuration` / `maxIdleDuration`，实现超时自动关闭与元数据记录.
+- 【本轮实现】与本机 n8n 的端到端示例与使用文档：参考 3.2.7，在单独文档中给出完整调用示例与推荐配置.
+- 【本轮实现】核心同步动作扩展（Phase A）：参考 3.2.4 中的设计，实现 `waitForSelector` / `waitForText` / `waitForUrl` / `waitForUrlContains`、`scrollIntoView(selector)` 等动作，并在相关接口中统一支持 `timeoutMs` + `onTimeout`（v1 仅支持 `none` / `screenshot_only`）.
+- 【本轮实现】同步动作增强（Phase B 子集）：为 `navigate` 增加 `waitUntil` / `networkidle` 等等待选项，并补充只读查询接口（如 `dom.check` / `isDisabled` / `getFormData` / `getValue` 等），不实现 `onTimeout=refresh/close_session`.
+- 【本轮实现】DOM 表单交互扩展：实现 checkbox/radio/select 选择与 file input 上传的动作接口，补齐常见表单场景.
+- 【本轮实现】页面滚动与测试页面：实现带速度抖动的滚动接口，并提供一个覆盖上述动作的本地测试 HTML 页面，便于人工与 n8n 端到端验收.
+- 【后续阶段】历史任务导出 / 导入 + 回放 UI：继续按 3.2.6 与 3.3 中的设计目标保留，本轮仅要求日志与 NDJSON 结构满足未来扩展需要，不开发实际导出 / 导入 / 回放功能.
 
 ---
 

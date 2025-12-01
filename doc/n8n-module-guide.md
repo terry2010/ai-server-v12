@@ -378,6 +378,161 @@ export function N8nModulePage() {
 - 通过 `window.api.getLogs({ module: 'n8n', ... })` 查询 n8n 模块相关日志。
 - UI 中模块列表包含 `n8n` 选项。
 
+### 4.5 在 n8n 中调用 Browser Agent 的端到端示例
+
+- **前置条件**
+  - 已在「Agent 设置」中启用 Browser Agent，并记录其端口（默认为 26080）。
+  - n8n 与桌面客户端运行在同一台机器上，可以访问 `http://127.0.0.1:{port}`。
+
+- **整体思路（示例：登录站点并导出报表）**
+  1. 创建 Browser Agent 会话，获得 `sessionId`。
+  2. 在会话内导航到登录页并完成表单登录。
+  3. 导航到报表页，提取表格/文本内容。
+  4. 触发下载，并在会话结束前列出/下载文件。
+  5. 关闭会话。
+
+- **节点 1：Set 基础参数**
+  - 节点类型：`Set`
+  - 示例字段：
+    - `baseUrl = "http://127.0.0.1:26080"`
+    - `loginUrl = "https://example.com/login"`
+    - `username = "user1"`
+    - `password = "pass1"`
+    - `date = {{$now.utc().format('YYYY-MM-DD')}}`  // 便于后续按日期访问 NDJSON
+
+- **节点 2：创建 Browser Agent 会话**
+  - 节点类型：`HTTP Request`
+  - Method: `POST`
+  - URL: `{{ $json.baseUrl || "http://127.0.0.1:26080" }}/sessions`
+  - Authentication: `None`
+  - Body → JSON：
+    ```jsonc
+    {
+      "profile": "system-a",
+      "clientId": "local-n8n"
+    }
+    ```
+  - 建议在后续加一个 `Set` 节点，将响应中的 `data.sessionId` 提取为顶层字段：
+    - 例如：`sessionId = {{ $json.data.sessionId }}`
+
+- **节点 3：导航到登录页**
+  - 节点类型：`HTTP Request`
+  - Method: `POST`
+  - URL:
+    ```text
+    {{ $json.baseUrl || "http://127.0.0.1:26080" }}/sessions/{{ $json.sessionId }}/navigate
+    ```
+  - Body → JSON：
+    ```jsonc
+    {
+      "url": "{{ $json.loginUrl }}",
+      "timeoutMs": 30000
+    }
+    ```
+
+- **节点 4：填写用户名/密码**
+  - 用户名：
+    - Method: `POST`
+    - URL: `{{ $json.baseUrl }}/sessions/{{ $json.sessionId }}/dom/fill`
+    - Body：
+      ```jsonc
+      {
+        "selector": "input[name=username]",
+        "text": "{{ $json.username }}",
+        "clearBefore": true,
+        "timeoutMs": 10000
+      }
+      ```
+  - 密码：
+    - 同上，将 `selector` 改为 `input[name=password]`，`text` 改为 `{{ $json.password }}`。
+
+- **节点 5：点击登录按钮**
+  - Method: `POST`
+  - URL: `{{ $json.baseUrl }}/sessions/{{ $json.sessionId }}/dom/click`
+  - Body：
+    ```jsonc
+    {
+      "selector": "button[type=submit]",
+      "timeoutMs": 10000
+    }
+    ```
+
+- **节点 6：提取内容（可选）**
+  - 提取整个页面文本：
+    - URL: `{{ $json.baseUrl }}/sessions/{{ $json.sessionId }}/content/text`
+    - Body：
+      ```jsonc
+      {
+        "scope": "page"
+      }
+      ```
+  - 或者提取某个表格：
+    - URL: `{{ $json.baseUrl }}/sessions/{{ $json.sessionId }}/content/table`
+    - Body：
+      ```jsonc
+      {
+        "selector": "table.report-table"
+      }
+      ```
+
+- **节点 7：截图（用于审计/排错）**
+  - Method: `POST`
+  - URL: `{{ $json.baseUrl }}/sessions/{{ $json.sessionId }}/screenshot`
+  - Body：
+    ```jsonc
+    {
+      "mode": "viewport",
+      "description": "after_login"
+    }
+    ```
+  - 返回值会在服务器端同时写入 `snapshots.ndjson` 与 `files.ndjson`，前端 Browser Agent 页面会在「会话详情」中自动聚合显示。
+
+- **节点 8：列出会话文件**
+  - Method: `GET`
+  - URL：
+    ```text
+    {{ $json.baseUrl }}/sessions/{{ $json.sessionId }}/files?date={{ $json.date }}
+    ```
+  - 返回值示例：
+    ```jsonc
+    {
+      "ok": true,
+      "data": {
+        "items": [
+          {
+            "fileId": "file_001",
+            "sessionId": "sess_xxx",
+            "name": "report.xlsx",
+            "size": 123456,
+            "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "path": "sessions/sess_xxx/files/file_001.dat",
+            "createdAt": "2025-01-01T10:03:00Z"
+          }
+        ]
+      }
+    }
+    ```
+  - 可以在后续 `Item Lists` / `Split In Batches` 节点中遍历文件列表。
+
+- **节点 9：下载单个文件**
+  - 前一节点中遍历到单个文件项后：
+    - Method: `GET`
+    - URL：
+      ```text
+      {{ $json.baseUrl }}/files/{{ $json.fileId }}?date={{ $json.date }}
+      ```
+    - Response Format: `File`
+  - 后续可以使用：
+    - `Write Binary File` 将文件落到磁盘；
+    - 或将二进制内容上传到对象存储 / 发送邮件附件等。
+
+- **节点 10：关闭会话（建议）**
+  - Method: `DELETE`
+  - URL: `{{ $json.baseUrl }}/sessions/{{ $json.sessionId }}`
+  - 关闭后，Browser Agent 会在 NDJSON 中记录 session 结束时间，后续由生命周期清理逻辑释放资源。
+
+> 上述流程只是一个参考骨架，实际业务中可以根据需要插入更多 DOM 操作、坐标级鼠标拖拽（`/mouse/click` / `/mouse/drag`）、内容提取与错误处理节点。
+
 ---
 
 ## 五、以 n8n 为模板添加新模块的 Checklist

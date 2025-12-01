@@ -10,12 +10,13 @@ import { startBrowserAgentServer, stopBrowserAgentServer } from './browser-agent
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
 // 为 Browser Agent / Playwright 集成开启 Chromium CDP 端口（用于 connectOverCDP）。
-// 端口默认 9223，可通过 AI_SERVER_CDP_PORT 覆盖。
+// 端口默认 9223，可通过 AI_SERVER_CDP_PORT 覆盖；remote-debugging-address 强制限定为 127.0.0.1。
 try {
   const raw = process.env.AI_SERVER_CDP_PORT
   const num = raw ? Number(raw) : 9223
   const port = Number.isFinite(num) && num > 0 && num < 65536 ? num : 9223
   app.commandLine.appendSwitch('remote-debugging-port', String(port))
+  app.commandLine.appendSwitch('remote-debugging-address', '127.0.0.1')
 } catch {}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))

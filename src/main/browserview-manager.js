@@ -159,6 +159,16 @@ function setupViewEvents(entry, homeUrl) {
       loadErrorPage(view, moduleId, url, message)
     })
   } catch {}
+  try {
+    if (moduleId === 'n8n') {
+      view.webContents.on('dom-ready', () => {
+        try {
+          const script = '(function(){try{var OriginalWebSocket=window.WebSocket;if(!OriginalWebSocket||OriginalWebSocket.__aiServerPatched)return;function isRelative(u){return typeof u==="string"&&u.charAt(0)==="/"&&u.charAt(1)!=="/";}function resolve(u){if(!isRelative(u))return u;var loc=window.location;var proto=loc.protocol==="https:"?"wss:":"ws:";return proto+"//"+loc.host+u;}var PatchedWebSocket=function(url,protocols){var resolved=resolve(url);return protocols!==undefined?new OriginalWebSocket(resolved,protocols):new OriginalWebSocket(resolved);};PatchedWebSocket.prototype=OriginalWebSocket.prototype;PatchedWebSocket.CONNECTING=OriginalWebSocket.CONNECTING;PatchedWebSocket.OPEN=OriginalWebSocket.OPEN;PatchedWebSocket.CLOSING=OriginalWebSocket.CLOSING;PatchedWebSocket.CLOSED=OriginalWebSocket.CLOSED;PatchedWebSocket.__aiServerPatched=true;window.WebSocket=PatchedWebSocket;}catch(e){}})();'
+          view.webContents.executeJavaScript(script, true).catch(() => {})
+        } catch {}
+      })
+    }
+  } catch {}
 }
 
 function detachCurrentView() {
@@ -238,6 +248,7 @@ export async function openModuleBrowserView(rawModuleId) {
     } catch {}
     try {
       await view.webContents.loadURL(homeUrl)
+      view.webContents.openDevTools({ mode: 'detach' })
     } catch (error) {
       const message = error && error.message ? String(error.message) : String(error || '')
       if (isVerboseLoggingEnabled()) {

@@ -74,6 +74,17 @@ function formatDurationMs(ms: number | null | undefined) {
   return `${m} 分 ${s} 秒`
 }
 
+function formatFileSize(size: number | null | undefined) {
+  if (size == null || !Number.isFinite(size) || size < 0) return '未知大小'
+  if (size < 1024) return `${size} B`
+  const kb = size / 1024
+  if (kb < 1024) return `${kb.toFixed(1)} KB`
+  const mb = kb / 1024
+  if (mb < 1024) return `${mb.toFixed(1)} MB`
+  const gb = mb / 1024
+  return `${gb.toFixed(1)} GB`
+}
+
 function translateStatus(status: 'running' | 'closed' | 'error') {
   if (status === 'running') return '运行中'
   if (status === 'closed') return '已关闭'
@@ -318,6 +329,8 @@ export function BrowserAgentPage() {
     if (!selectedSessionId) return null
     return sessions.find((s) => s.sessionId === selectedSessionId) || null
   }, [sessions, selectedSessionId])
+
+  const sessionFiles = detail && Array.isArray((detail as any).files) ? (detail as any).files : []
 
   const handleShowWindow = async () => {
     if (!selectedSessionId) return

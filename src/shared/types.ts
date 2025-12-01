@@ -100,6 +100,8 @@ export interface BrowserAgentSettings {
   port: number
   token?: string
   dataRoot?: string
+  maxSessionDurationMinutes?: number
+  maxIdleMinutes?: number
 }
 
 export type BrowserAgentSessionStatus = 'running' | 'closed' | 'error'
@@ -144,9 +146,20 @@ export interface BrowserAgentActionTimelineItem {
     | null
 }
 
+export interface BrowserAgentFileItem {
+  fileId: string
+  sessionId: string
+  name: string | null
+  size: number | null
+  mimeType: string | null
+  path: string | null
+  createdAt: string | null
+}
+
 export interface BrowserAgentSessionDetail {
   session: BrowserAgentSessionSummary
   actions: BrowserAgentActionTimelineItem[]
+  files?: BrowserAgentFileItem[]
 }
 
 export interface BrowserAgentRuntimeMetrics {

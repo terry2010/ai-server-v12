@@ -54,6 +54,8 @@ const defaultAppSettings = {
     port: 26080,
     token: '',
     dataRoot: '',
+    maxSessionDurationMinutes: 30,
+    maxIdleMinutes: 10,
   },
 }
 

@@ -157,6 +157,7 @@
   "ok": true,
   "errorCode": null,
   "errorMessage": null,
+  "errorDetails": null,
   "data": { /* ... */ }
 }
 ```
@@ -164,6 +165,7 @@
 - `ok`: 布尔，标记本次调用是否成功；
 - `errorCode`: 失败时的错误码（如 `TIMEOUT`, `NETWORK_ERROR`, `NO_SUCH_ELEMENT` 等）；
 - `errorMessage`: 人类可读的错误信息；
+- `errorDetails`: 失败时的结构化错误详情（如 actionId、sessionId、actionType、selector、timeoutMs、onTimeout、snapshotFileId 等），成功时为 `null` 或省略；
 - `data`: 成功时返回的数据结构，随接口而变。
 
 #### 3.1.1 健康检查接口
@@ -254,13 +256,56 @@ curl --location --request POST 'http://127.0.0.1:26080/debug/playwright-spike' \
   "url": "https://example.com",
   "waitUntil": "load",              // load/domcontentloaded/networkidle
   "timeoutMs": 30000,
-  "onTimeout": "screenshot_and_close"  // none/screenshot_only/refresh/close_session
+  "onTimeout": "screenshot_only"    // v1 实现仅支持 none/screenshot_only，其他枚举预留为后续扩展
 }
 ```
 
 - 返回：
   - 成功：当前 URL、title、加载耗时等；
   - 失败：`errorCode = TIMEOUT/NETWORK_ERROR/...`。
+
+#### POST /sessions/{sessionId}/wait/selector
+
+- 功能：等待某个元素满足指定状态（attached/visible/hidden/detached），常用于等待页面异步加载完成。
+- 请求体示例：
+
+```jsonc
+{
+  "selector": "#login-form",
+  "state": "visible",          // attached|visible|hidden|detached
+  "timeoutMs": 15000,
+  "onTimeout": "screenshot_only"
+}
+```
+
+#### POST /sessions/{sessionId}/wait/text
+
+- 功能：在整个页面或指定元素范围内等待某段文本出现。
+- 请求体示例：
+
+```jsonc
+{
+  "text": "登录成功",
+  "scope": "page",             // page|selector
+  "selector": "#message",      // 当 scope=selector 时必填
+  "timeoutMs": 15000,
+  "onTimeout": "none"
+}
+```
+
+#### POST /sessions/{sessionId}/wait/url
+
+- 功能：等待当前 URL 满足包含/相等等条件。
+- 请求体示例：
+
+```jsonc
+{
+  "contains": "/dashboard",
+  "equals": null,
+  "timeoutMs": 15000,
+  "onTimeout": "screenshot_only"
+}
+```
 
 #### POST /sessions/{sessionId}/dom/click
 
@@ -281,6 +326,61 @@ curl --location --request POST 'http://127.0.0.1:26080/debug/playwright-spike' \
   "timeoutMs": 10000
 }
 ```
+
+#### 表单相关 DOM 操作
+
+- `POST /sessions/{sessionId}/dom/set-checkbox`
+  - 将指定 checkbox 设置为选中/未选中。
+  - 请求体示例：
+
+    ```jsonc
+    {
+      "selector": "input[type=checkbox][name=rememberMe]",
+      "checked": true,
+      "timeoutMs": 10000,
+      "onTimeout": "none"
+    }
+    ```
+
+- `POST /sessions/{sessionId}/dom/set-radio`
+  - 勾选指定 radio（同一 name 下其他选项自动取消选中）。
+
+- `POST /sessions/{sessionId}/dom/select-options`
+  - 为 `<select>` 设置选中项，支持按 value/label/index 选择，支持多选。
+
+- `POST /sessions/{sessionId}/dom/upload-file`
+  - 为 `input[type=file]` 绑定本机文件路径列表，实现文件上传动作。
+
+#### 页面滚动与滚动到元素
+
+- `POST /sessions/{sessionId}/dom/scroll-into-view`
+  - 将页面滚动到指定元素附近，底层调用 `scrollIntoViewIfNeeded()`。
+
+- `POST /sessions/{sessionId}/dom/scroll`
+  - 按给定模式和时间滚动整页，支持速度抖动，用于模拟人工滚动行为：
+
+    ```jsonc
+    {
+      "mode": "toPosition",          // toPosition|byDelta|toElement
+      "targetY": 1200,
+      "durationMs": 2000,
+      "stepMinMs": 16,
+      "stepMaxMs": 50,
+      "jitterRatio": 0.2,
+      "timeoutMs": 10000
+    }
+    ```
+
+#### 状态与表单数据查询
+
+- `POST /sessions/{sessionId}/dom/is-disabled`
+  - 返回目标元素是否禁用（同时给出 `disabled`/`aria-disabled` 等信息）。
+
+- `POST /sessions/{sessionId}/dom/get-form-data`
+  - 按表单选择器获取所有带 name 的表单字段当前值，包含文本框、checkbox/radio、select 等。
+
+- `POST /sessions/{sessionId}/dom/get-value`
+  - 获取单个 input/textarea/select/checkbox/radio 的当前值或选中状态。
 
 #### POST /sessions/{sessionId}/mouse/drag
 
@@ -488,11 +588,11 @@ curl --location --request POST 'http://127.0.0.1:26080/debug/playwright-spike' \
 
 ### 5.2 onTimeout 策略
 
-- 枚举值（初版建议）：
+- 枚举值：
   - `none`：不做额外处理，仅返回 TIMEOUT 错误；
-  - `screenshot_only`：记录当前页面截图与日志；
-  - `refresh`：记录截图后刷新页面；
-  - `close_session`：记录截图后关闭 Session。
+  - `screenshot_only`：记录当前页面截图与日志（本轮实现支持的两种策略）；
+  - `refresh`：记录截图后刷新页面（阶段 2 预留，不在当前实现范围内）；
+  - `close_session`：记录截图后关闭 Session（阶段 2 预留，不在当前实现范围内）。
 
 - 策略执行：
   - 由 browser-agent-core 在捕获超时异常后，根据配置统一执行；

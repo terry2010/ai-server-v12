@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>Browser Agent 功能测试页</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        margin: 0;
+        padding: 0;
+        line-height: 1.5;
+      }
+      header {
+        position: sticky;
+        top: 0;
+        background: #111827;
+        color: #f9fafb;
+        padding: 12px 24px;
+        z-index: 10;
+      }
+      main {
+        padding: 16px 24px 120px;
+      }
+      section {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin-bottom: 24px;
+        background: #ffffff;
+      }
+      section h2 {
+        margin-top: 0;
+        font-size: 18px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 16px;
+      }
+      label {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 13px;
+        color: #374151;
+      }
+      input[type="text"],
+      input[type="password"],
+      textarea,
+      select {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 8px;
+        border-radius: 4px;
+        border: 1px solid #d1d5db;
+        font-size: 13px;
+      }
+      textarea {
+        min-height: 60px;
+        resize: vertical;
+      }
+      .field {
+        margin-bottom: 10px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .row > div {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      button {
+        padding: 6px 10px;
+        border-radius: 4px;
+        border: 1px solid #d1d5db;
+        background: #f3f4f6;
+        cursor: pointer;
+        font-size: 13px;
+      }
+      button.primary {
+        border-color: #2563eb;
+        background: #2563eb;
+        color: white;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .log {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+        background: #111827;
+        color: #e5e7eb;
+        padding: 10px 12px;
+        border-radius: 6px;
+        max-height: 220px;
+        overflow: auto;
+      }
+      .log strong {
+        color: #fbbf24;
+      }
+      table.demo-table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13px;
+      }
+      table.demo-table th,
+      table.demo-table td {
+        border: 1px solid #d1d5db;
+        padding: 4px 6px;
+        text-align: left;
+      }
+      table.demo-table th {
+        background: #f9fafb;
+      }
+      .long-content {
+        height: 1600px;
+        background: linear-gradient(to bottom, #f3f4f6, #e5e7eb);
+        padding: 16px;
+      }
+      .anchor-block {
+        margin: 80px 0;
+        padding: 10px 14px;
+        border-radius: 6px;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1 style="margin: 0; font-size: 18px;">Browser Agent 功能测试页</h1>
+      <p style="margin: 2px 0 0; font-size: 12px; opacity: 0.8;">
+        覆盖：表单输入 / checkbox / radio / select / file / 滚动 / table / 区域 HTML / 禁用状态 / 表单数据
+      </p>
+    </header>
+    <main>
+      <section id="login-section">
+        <h2>1. 登录表单（文本框 + 密码 + checkbox + 禁用按钮）</h2>
+        <div class="grid">
+          <div>
+            <div class="field">
+              <label for="login-username">用户名</label>
+              <input id="login-username" name="username" type="text" value="test_user" />
+            </div>
+            <div class="field">
+              <label for="login-password">密码</label>
+              <input id="login-password" name="password" type="password" value="123456" />
+            </div>
+            <div class="field row">
+              <div>
+                <input
+                  id="login-remember"
+                  type="checkbox"
+                  name="rememberMe"
+                  checked
+                />
+                <label for="login-remember">记住我</label>
+              </div>
+              <button id="toggle-submit-disabled" type="button">切换提交按钮禁用状态</button>
+            </div>
+            <div class="field">
+              <button id="login-submit" type="button" data-log="login-submit">
+                登录（用于点击测试）
+              </button>
+            </div>
+          </div>
+          <div>
+            <p style="font-size: 13px; margin-top: 0;">建议测试：</p>
+            <ul style="font-size: 13px; padding-left: 18px; margin-top: 4px;">
+              <li>wait.selector: 等待 <code>#login-submit</code> 可见</li>
+              <li>dom.fill: 填写用户名/密码</li>
+              <li>dom.set-checkbox: 勾选/取消 记住我</li>
+              <li>dom.isDisabled: 读取登录按钮当前禁用状态</li>
+              <li>dom.getFormData: 通过 <code>#login-form-area</code> 或整个文档读取字段值</li>
+            </ul>
+          </div>
+        </div>
+        <div id="login-form-area" style="display:none"></div>
+      </section>
+
+      <section id="choice-section">
+        <h2>2. 选项区（radio / 多个 checkbox / 单选 + 多选 select）</h2>
+        <div class="grid">
+          <div>
+            <fieldset>
+              <legend style="font-size: 13px;">性别（radio）</legend>
+              <div class="row">
+                <div>
+                  <input id="gender-male" type="radio" name="gender" value="male" checked />
+                  <label for="gender-male">男</label>
+                </div>
+                <div>
+                  <input id="gender-female" type="radio" name="gender" value="female" />
+                  <label for="gender-female">女</label>
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset style="margin-top: 12px;">
+              <legend style="font-size: 13px;">兴趣（checkbox）</legend>
+              <div class="row">
+                <div>
+                  <input id="hobby-code" type="checkbox" name="hobby" value="code" checked />
+                  <label for="hobby-code">编程</label>
+                </div>
+                <div>
+                  <input id="hobby-music" type="checkbox" name="hobby" value="music" />
+                  <label for="hobby-music">音乐</label>
+                </div>
+                <div>
+                  <input id="hobby-sport" type="checkbox" name="hobby" value="sport" />
+                  <label for="hobby-sport">运动</label>
+                </div>
+              </div>
+            </fieldset>
+          </div>
+
+          <div>
+            <div class="field">
+              <label for="country-select">国家（单选 select）</label>
+              <select id="country-select" name="country">
+                <option value="">请选择</option>
+                <option value="CN" selected>中国</option>
+                <option value="US">美国</option>
+                <option value="JP">日本</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="tags-select">标签（多选 select）</label>
+              <select id="tags-select" name="tags" multiple size="4">
+                <option value="a" selected>标签A</option>
+                <option value="b">标签B</option>
+                <option value="c">标签C</option>
+                <option value="d" selected>标签D</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="file-section">
+        <h2>3. 文件上传</h2>
+        <div class="grid">
+          <div>
+            <div class="field">
+              <label for="single-file">单文件上传</label>
+              <input id="single-file" name="singleFile" type="file" />
+            </div>
+            <div class="field">
+              <label for="multi-file">多文件上传</label>
+              <input id="multi-file" name="multiFile" type="file" multiple />
+            </div>
+          </div>
+          <div>
+            <p style="font-size: 13px; margin-top: 0;">建议测试：</p>
+            <ul style="font-size: 13px; padding-left: 18px; margin-top: 4px;">
+              <li>dom.upload-file: 针对 <code>#single-file</code> / <code>#multi-file</code></li>
+              <li>dom.getFormData: 观察 file input 是否被包含（可以只做元信息）</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="scroll-section">
+        <h2>4. 长页面滚动区</h2>
+        <p style="font-size: 13px; margin-top: 0;">
+          外层整个页面比较长，下面这个内部区块 <code>#long-scroll-area</code> 高度更长，可用
+          dom.scroll / wait.selector / scroll-into-view 做综合测试。
+        </p>
+        <div id="long-scroll-area" class="long-content">
+          <div id="anchor-1" class="anchor-block">滚动锚点 1（#anchor-1）</div>
+          <div id="anchor-2" class="anchor-block">滚动锚点 2（#anchor-2）</div>
+          <div id="anchor-3" class="anchor-block">滚动锚点 3（#anchor-3）</div>
+          <div id="anchor-4" class="anchor-block">滚动锚点 4（#anchor-4）</div>
+        </div>
+      </section>
+
+      <section id="content-section">
+        <h2>5. 内容区域（div + table）</h2>
+        <div class="grid">
+          <div>
+            <div id="article" style="border: 1px solid #e5e7eb; padding: 10px 12px; border-radius: 6px;">
+              <h3>测试文章区域（#article）</h3>
+              <p>这里是一段用于测试的说明文字。Browser Agent 可以提取这里的纯文本和 HTML。</p>
+              <p>第二段文字，用于测试 <strong>wait.text</strong> 与 <code>content/text</code>。</p>
+            </div>
+          </div>
+          <div>
+            <table id="orders-table" class="demo-table">
+              <thead>
+                <tr>
+                  <th>订单号</th>
+                  <th>客户</th>
+                  <th>金额</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>ORD-001</td>
+                  <td>Alice</td>
+                  <td>100</td>
+                </tr>
+                <tr>
+                  <td>ORD-002</td>
+                  <td>Bob</td>
+                  <td>200</td>
+                </tr>
+                <tr>
+                  <td>ORD-003</td>
+                  <td>Carol</td>
+                  <td>300</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="log-section">
+        <h2>6. 页面内操作日志（方便肉眼确认）</h2>
+        <p style="font-size: 13px; margin-top: 0;">
+          页面脚本会把一些简单动作记录到这里（点击登录按钮、切换禁用等）。Browser Agent 可用
+          <code>content/text</code> / <code>content/html</code> 对 <code>#page-log</code> 抓取内容。
+        </p>
+        <div id="page-log" class="log"></div>
+      </section>
+    </main>
+
+    <script>
+      (function () {
+        const logEl = document.getElementById('page-log')
+        function appendLog(message) {
+          if (!logEl) return
+          const ts = new Date().toISOString()
+          const line = `[${ts}] ${message}`
+          logEl.textContent = line + '\n' + logEl.textContent
+        }
+
+        // 登录按钮点击日志
+        const loginBtn = document.getElementById('login-submit')
+        if (loginBtn) {
+          loginBtn.addEventListener('click', () => {
+            appendLog('点击 登录 按钮 (id=login-submit)')
+          })
+        }
+
+        // 切换禁用状态按钮
+        const toggleBtn = document.getElementById('toggle-submit-disabled')
+        if (toggleBtn && loginBtn) {
+          toggleBtn.addEventListener('click', () => {
+            loginBtn.disabled = !loginBtn.disabled
+            appendLog(
+              `切换登录按钮禁用状态: now disabled = ${String(loginBtn.disabled)}`,
+            )
+          })
+        }
+
+        // 把登录字段镜像到一个隐藏 div，方便用 dom.getFormData/区域 text/html 读取
+        function syncLoginArea() {
+          const area = document.getElementById('login-form-area')
+          if (!area) return
+          const username = document.getElementById('login-username')
+          const password = document.getElementById('login-password')
+          const remember = document.getElementById('login-remember')
+          area.innerHTML = `
+            <form id="login-form-copy">
+              <input type="text" name="username" value="$${'{'}
+                username && username.value ? username.value : ''
+              }" />
+              <input type="password" name="password" value="$${'{'}
+                password && password.value ? password.value : ''
+              }" />
+              <input type="checkbox" name="rememberMe" value="on" $${'{'}
+                remember && remember.checked ? 'checked' : ''
+              } />
+            </form>
+          `
+        }
+
+        syncLoginArea()
+
+        const usernameInput = document.getElementById('login-username')
+        const passwordInput = document.getElementById('login-password')
+        const rememberInput = document.getElementById('login-remember')
+
+        ;[usernameInput, passwordInput, rememberInput].forEach((el) => {
+          if (!el) return
+          el.addEventListener('change', syncLoginArea)
+          el.addEventListener('input', syncLoginArea)
+        })
+      })()
+    </script>
+  </body>
+</html>

@@ -2060,7 +2060,7 @@ export function setupIpcHandlers() {
         return aKey < bKey ? -1 : 1
       })
 
-      if (!summary && actions.length === 0) {
+      if (!summary && actions.length === 0 && (!fileRecords || fileRecords.length === 0)) {
         return null
       }
 
@@ -2088,9 +2088,49 @@ export function setupIpcHandlers() {
         summary.lastActionType = last.type || summary.lastActionType
       }
 
+      const files = []
+      for (const rec of fileRecords) {
+        if (!rec || typeof rec !== 'object') continue
+        const rawSessionId = rec.sessionId
+        const sid = typeof rawSessionId === 'string' && rawSessionId.trim() ? rawSessionId.trim() : ''
+        if (!sid || sid !== sessionId) continue
+
+        const rawFileId = rec.fileId
+        const fileId = typeof rawFileId === 'string' && rawFileId.trim() ? rawFileId.trim() : null
+        if (!fileId) continue
+
+        const name =
+          typeof rec.name === 'string' && rec.name.trim() ? rec.name.trim() : null
+        const size =
+          typeof rec.size === 'number' && Number.isFinite(rec.size) && rec.size >= 0
+            ? rec.size
+            : null
+        const mimeType =
+          typeof rec.mimeType === 'string' && rec.mimeType.trim()
+            ? rec.mimeType.trim()
+            : null
+        const pathValue =
+          typeof rec.path === 'string' && rec.path.trim() ? rec.path.trim() : null
+        const createdAt =
+          typeof rec.createdAt === 'string' && rec.createdAt.trim()
+            ? rec.createdAt.trim()
+            : null
+
+        files.push({
+          fileId,
+          sessionId,
+          name,
+          size,
+          mimeType,
+          path: pathValue,
+          createdAt,
+        })
+      }
+
       return {
         session: summary,
         actions,
+        files,
       }
     } catch {
       return null

@@ -1,8 +1,18 @@
 import http from 'node:http'
+import fs from 'node:fs'
+import path from 'node:path'
 import { BrowserWindow } from 'electron'
 import { defaultAppSettings, getAppSettings } from './app-settings.js'
 import { createSession, listSessions, getSession, closeSession, showSession, hideSession, setSessionWindowId } from './browser-agent-core.js'
-import { appendSessionRecord, appendActionRecord, appendBrowserAgentTextLog } from './browser-agent-storage.js'
+import {
+  appendSessionRecord,
+  appendActionRecord,
+  appendBrowserAgentTextLog,
+  appendSnapshotRecord,
+  appendFileRecord,
+  getBrowserAgentDataRootDir,
+  ensureDirSync,
+} from './browser-agent-storage.js'
 
 /** @typedef {import('../shared/types').BrowserAgentSettings} BrowserAgentSettings */
 
@@ -569,6 +579,9 @@ function handleRequest(req, res) {
           }
 
           const actionStartAt = new Date().toISOString()
+          const actionId = nextActionId()
+          const snapshotId = `snap_${actionId}`
+          const fileId = `file_${actionId}`
 
           const result = await mod.takeScreenshot({
             sessionId,
@@ -584,8 +597,76 @@ function handleRequest(req, res) {
           })
 
           try {
+            let finalSnapshotId = null
+            try {
+              const root = getBrowserAgentDataRootDir()
+              const tmpPath =
+                result && typeof result.screenshotPath === 'string'
+                  ? result.screenshotPath
+                  : ''
+              if (root && tmpPath) {
+                const extRaw = path.extname(tmpPath) || '.png'
+                const safeExt = extRaw.startsWith('.') ? extRaw : `.${extRaw}`
+                const relDir = path.join('sessions', sessionId, 'screenshots')
+                const absDir = path.join(root, relDir)
+                const ensured = ensureDirSync(absDir)
+                if (ensured) {
+                  const fileName = `${snapshotId}${safeExt}`
+                  const relPath = path.join(relDir, fileName)
+                  const absPath = path.join(root, relDir, fileName)
+                  fs.copyFileSync(tmpPath, absPath)
+
+                  let size = 0
+                  try {
+                    const stat = fs.statSync(absPath)
+                    if (stat && typeof stat.size === 'number') {
+                      size = stat.size
+                    }
+                  } catch {}
+
+                  const lowerExt = safeExt.toLowerCase()
+                  const mimeType =
+                    lowerExt === '.jpg' || lowerExt === '.jpeg'
+                      ? 'image/jpeg'
+                      : 'image/png'
+
+                  const createdAt = new Date().toISOString()
+
+                  appendSnapshotRecord({
+                    snapshotId,
+                    sessionId,
+                    actionId,
+                    path: relPath,
+                    description:
+                      body && typeof body.description === 'string'
+                        ? body.description
+                        : null,
+                    createdAt,
+                  })
+
+                  appendFileRecord({
+                    fileId,
+                    sessionId,
+                    path: relPath,
+                    name: fileName,
+                    size,
+                    mimeType,
+                    createdAt,
+                  })
+
+                  finalSnapshotId = snapshotId
+
+                  try {
+                    if (result && typeof result === 'object') {
+                      result.screenshotPath = absPath
+                    }
+                  } catch {}
+                }
+              }
+            } catch {}
+
             appendActionRecord({
-              id: nextActionId(),
+              id: actionId,
               sessionId,
               type: 'screenshot',
               params: {
@@ -604,7 +685,7 @@ function handleRequest(req, res) {
               status: 'ok',
               errorCode: null,
               errorMessage: null,
-              snapshotId: null,
+              snapshotId: finalSnapshotId,
             })
           } catch {}
 

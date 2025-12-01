@@ -102,6 +102,60 @@ export interface BrowserAgentSettings {
   dataRoot?: string
 }
 
+export type BrowserAgentSessionStatus = 'running' | 'closed' | 'error'
+
+export interface BrowserAgentSessionSummary {
+  sessionId: string
+  profile: string | null
+  clientId: string | null
+  status: BrowserAgentSessionStatus
+  createdAt: string | null
+  finishedAt: string | null
+  lastErrorCode: string | null
+  lastErrorMessage: string | null
+  actionsCount: number
+  lastActionAt: string | null
+  lastActionType: string | null
+  domain: string | null
+}
+
+export type BrowserAgentActionStatus = 'ok' | 'error'
+
+export interface BrowserAgentActionTimelineItem {
+  id: string
+  sessionId: string
+  type: string
+  params: any
+  startAt: string | null
+  endAt: string | null
+  durationMs: number | null
+  status: BrowserAgentActionStatus
+  errorCode: string | null
+  errorMessage: string | null
+  snapshotId: string | null
+  screenshot:
+    | {
+        snapshotId: string
+        description: string | null
+        path: string
+        fileSize: number | null
+        mimeType: string | null
+      }
+    | null
+}
+
+export interface BrowserAgentSessionDetail {
+  session: BrowserAgentSessionSummary
+  actions: BrowserAgentActionTimelineItem[]
+}
+
+export interface BrowserAgentRuntimeMetrics {
+  cpuUsage: number | null
+  memoryUsage: number | null
+  runningSessions: number
+  windowsCount: number
+}
+
 export interface AppSettings {
   systemName: string
   language: LanguageSetting

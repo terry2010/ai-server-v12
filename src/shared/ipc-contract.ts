@@ -9,6 +9,9 @@ import type {
   DockerActionResult,
   SystemMetrics,
   ModuleRuntimeMetrics,
+  BrowserAgentSessionSummary,
+  BrowserAgentSessionDetail,
+  BrowserAgentRuntimeMetrics,
 } from './types'
 
 export type EmptyPayload = Record<string, never>
@@ -42,6 +45,16 @@ export interface IpcRequestMap {
   'monitor:getModules': EmptyPayload
   'settings:get': EmptyPayload
   'settings:update': Partial<AppSettings>
+  'browserAgent:listSessions': {
+    date?: string
+    profile?: string
+    clientId?: string
+    status?: 'all' | 'running' | 'closed'
+  }
+  'browserAgent:getSessionDetail': { sessionId: string; date?: string }
+  'browserAgent:showSessionWindow': { sessionId: string }
+  'browserAgent:openSnapshot': { snapshotId: string; date?: string }
+  'browserAgent:getRuntimeMetrics': EmptyPayload
   'debug:dockerStopAll': EmptyPayload
   'debug:dockerRemoveAll': EmptyPayload
   'debug:dockerPruneVolumes': EmptyPayload
@@ -73,6 +86,15 @@ export interface IpcResponseMap {
   'monitor:getModules': { items: ModuleRuntimeMetrics[] }
   'settings:get': AppSettings
   'settings:update': AppSettings
+  'browserAgent:listSessions': { items: BrowserAgentSessionSummary[] }
+  'browserAgent:getSessionDetail': BrowserAgentSessionDetail | null
+  'browserAgent:showSessionWindow': {
+    success: boolean
+    reason?: 'invalid_session_id' | 'session_not_found' | 'no_window_id' | 'window_closed' | 'error'
+    error?: string
+  }
+  'browserAgent:openSnapshot': { success: boolean; error?: string }
+  'browserAgent:getRuntimeMetrics': BrowserAgentRuntimeMetrics
   'debug:dockerStopAll': DockerActionResult
   'debug:dockerRemoveAll': DockerActionResult
   'debug:dockerPruneVolumes': DockerActionResult

@@ -69,6 +69,28 @@ const api = {
 
   updateSettings: (patch) => ipcRenderer.invoke('settings:update', patch ?? {}),
 
+  browserAgentListSessions: (params = {}) =>
+    ipcRenderer.invoke('browserAgent:listSessions', {
+      date: params.date,
+      profile: params.profile,
+      clientId: params.clientId,
+      status: params.status,
+    }),
+
+  browserAgentGetSessionDetail: (params) =>
+    ipcRenderer.invoke('browserAgent:getSessionDetail', params ?? {}),
+
+  browserAgentShowSessionWindow: (sessionId) =>
+    ipcRenderer.invoke('browserAgent:showSessionWindow', {
+      sessionId,
+    }),
+
+  browserAgentOpenSnapshot: (params) =>
+    ipcRenderer.invoke('browserAgent:openSnapshot', params ?? {}),
+
+  browserAgentGetRuntimeMetrics: () =>
+    ipcRenderer.invoke('browserAgent:getRuntimeMetrics', {}),
+
   getSystemMetrics: () => ipcRenderer.invoke('monitor:getSystem', {}),
 
   getModuleMetrics: () => ipcRenderer.invoke('monitor:getModules', {}),

@@ -85,10 +85,23 @@ export function AppLayout() {
     oneapi: 0,
     ragflow: 0,
   })
+  const [browserAgentRuntime, setBrowserAgentRuntime] = useState<
+    | {
+        cpuUsage: number | null
+        memoryUsage: number | null
+        runningSessions: number
+        windowsCount: number
+      }
+    | null
+  >(null)
+
+  const isBrowserAgentRoute = location.pathname.startsWith('/browser-agent')
 
   const isModuleRoute = ['/n8n', '/dify', '/oneapi', '/ragflow'].some((base) =>
     location.pathname.startsWith(base),
   )
+
+  const isModuleLikeRoute = isModuleRoute || isBrowserAgentRoute
 
   const currentModuleId: 'n8n' | 'dify' | 'oneapi' | 'ragflow' | null = isModuleRoute
     ? location.pathname.startsWith('/n8n')
@@ -212,6 +225,36 @@ export function AppLayout() {
       window.removeEventListener('appSettingsUpdated', handler as EventListener)
     }
   }, [])
+
+  useEffect(() => {
+    if (!isBrowserAgentRoute) {
+      setBrowserAgentRuntime(null)
+      return
+    }
+
+    let cancelled = false
+
+    const load = async () => {
+      try {
+        if (!window.api || typeof window.api.browserAgentGetRuntimeMetrics !== 'function') return
+        const result = await window.api.browserAgentGetRuntimeMetrics()
+        if (cancelled) return
+        setBrowserAgentRuntime(result || null)
+      } catch {
+        if (!cancelled) {
+          setBrowserAgentRuntime(null)
+        }
+      }
+    }
+
+    load()
+    const timer = window.setInterval(load, 5000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [isBrowserAgentRoute])
 
   useEffect(() => {
     let cancelled = false
@@ -437,7 +480,23 @@ export function AppLayout() {
                     <span>首页</span>
                   </NavLink>
 
+                  <NavLink
+                    key="browser-agent"
+                    to="/browser-agent"
+                    className={cn(
+                      'group flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150',
+                      location.pathname.startsWith('/browser-agent')
+                        ? 'bg-white text-slate-900 shadow-[0_1px_4px_rgba(15,23,42,0.22)] ring-1 ring-sky-200/80 dark:bg-slate-100 dark:text-slate-900 dark:ring-sky-300/70'
+                        : 'text-slate-600/80 hover:bg-white/40 hover:text-slate-900 dark:text-slate-300/80 dark:hover:bg-slate-800/70 dark:hover:text-slate-50',
+                    )}
+                  >
+                    <span>AI 浏览器</span>
+                  </NavLink>
+
                   {(() => {
+                    if (isBrowserAgentRoute) {
+                      return null
+                    }
                     if (!isModuleRoute || !currentModuleId) {
                       const visible = moduleTabOrder.filter((id) => isModuleVisible(id))
                       return visible.map((id) => {
@@ -613,6 +672,18 @@ export function AppLayout() {
                   </span>
                 </div>
               )}
+
+              {isBrowserAgentRoute && (
+                <div className="hidden items-center gap-1 rounded-full bg-white/70 px-2 py-1 text-[11px] text-slate-600 shadow-sm shadow-black/5 backdrop-blur-md dark:bg-slate-900/80 dark:text-slate-200 lg:flex">
+                  <span className="mx-1 whitespace-nowrap text-[11px] text-slate-500 dark:text-slate-400">
+                    CPU {formatPercent(browserAgentRuntime?.cpuUsage ?? null)} · 内存{' '}
+                    {formatPercent(browserAgentRuntime?.memoryUsage ?? null)}
+                  </span>
+                  <span className="whitespace-nowrap text-[11px] text-slate-400 dark:text-slate-500">
+                    {(browserAgentRuntime?.runningSessions ?? 0) + ' 条会话运行中'}
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="ml-auto flex items-center gap-3">
@@ -652,7 +723,7 @@ export function AppLayout() {
         </header>
 
         <div className="flex flex-1 pt-14">
-          {!isModuleRoute && (
+          {!isModuleLikeRoute && (
             <aside className="fixed bottom-4 left-4 top-20 z-20 hidden w-60 lg:block">
               <GlassCard className="flex h-full flex-col rounded-2xl p-3 text-sm text-slate-800 dark:text-slate-200">
                 <div className="mb-2 flex items-center justify-between px-2">
@@ -697,7 +768,7 @@ export function AppLayout() {
           <main
             className={cn(
               'relative mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 pb-6 pt-4',
-              !isModuleRoute && 'lg:pl-72',
+              !isModuleLikeRoute && 'lg:pl-72',
             )}
           >
             <div className="space-y-4">

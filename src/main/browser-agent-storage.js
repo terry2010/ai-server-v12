@@ -5,7 +5,7 @@ import { getAppSettings, defaultAppSettings } from './app-settings.js'
 
 let cachedDataRoot = ''
 
-function getBrowserAgentDataRootDir() {
+export function getBrowserAgentDataRootDir() {
   if (cachedDataRoot) return cachedDataRoot
 
   let root = ''
@@ -40,7 +40,7 @@ function getBrowserAgentDataRootDir() {
   return root
 }
 
-function ensureDirSync(dir) {
+export function ensureDirSync(dir) {
   if (!dir) return null
   try {
     fs.mkdirSync(dir, { recursive: true })
@@ -51,7 +51,12 @@ function ensureDirSync(dir) {
 }
 
 function getCurrentDateString() {
-  return new Date().toISOString().slice(0, 10)
+  const d = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  const yyyy = d.getFullYear()
+  const MM = pad(d.getMonth() + 1)
+  const dd = pad(d.getDate())
+  return `${yyyy}-${MM}-${dd}`
 }
 
 function appendFileLine(filePath, line) {
@@ -103,4 +108,33 @@ export function appendSnapshotRecord(record) {
 
 export function appendFileRecord(record) {
   appendNdjson('files', record)
+}
+
+export function readNdjson(kind, date) {
+  try {
+    const root = getBrowserAgentDataRootDir()
+    if (!root) return []
+    const metaDir = path.join(root, 'meta')
+    const dateStr = date && typeof date === 'string' && date.trim() ? date.trim() : getCurrentDateString()
+    const filePath = path.join(metaDir, `${kind}-${dateStr}.ndjson`)
+    if (!fs.existsSync(filePath)) return []
+    const content = fs.readFileSync(filePath, 'utf8')
+    if (!content) return []
+    const lines = content.split(/\r?\n/)
+    const items = []
+    for (const raw of lines) {
+      const line = raw && raw.trim()
+      if (!line) continue
+      try {
+        const obj = JSON.parse(line)
+        if (obj && typeof obj === 'object') {
+          items.push(obj)
+        }
+      } catch {
+      }
+    }
+    return items
+  } catch {
+    return []
+  }
 }

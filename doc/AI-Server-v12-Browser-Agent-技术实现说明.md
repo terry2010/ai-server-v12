@@ -512,6 +512,15 @@ curl --location --request POST 'http://127.0.0.1:26080/debug/playwright-spike' \
   - 过滤参数（时间区间、profile、clientId、状态、关键字）；
   - 回放时的 UI 表现（时间线/截图/日志展示），不感知底层存储实现。
 
+- **Dashboard 模块卡片与路由集成**：
+  - 在首页 Dashboard 的模块列表区域增加一个「AI 浏览器」模块卡片，用于作为 Browser Agent 的唯一入口；
+  - 卡片的显示条件：仅当 `appSettings.browserAgent?.enabled === true` 时才渲染；
+    - 当 Browser Agent 在「系统设置 → Agent 设置」中被关闭时，首页不显示该卡片，避免出现实际不可用的入口；
+  - 点击卡片的「打开」按钮后，路由跳转到 `/browser-agent` 页面：
+    - 该页面挂载在现有 `AppLayout` 之下，复用顶部标签栏与整体布局风格；
+    - 顶部标签栏继续展示 n8n/Dify/OneAPI/RagFlow 等模块标签，但 `/browser-agent` 页面本身不会创建 BrowserView 或绑定 Docker 模块，仅用于展示 AI 浏览器任务列表与详情；
+  - 左侧 SideNav（仪表盘 / 在线教程 / AI 市场 / 系统设置 / 系统日志 / 性能监控）**不增加**「AI 浏览器」单独入口，避免导航层级过多，保持“从 Dashboard 进入模块”的统一模式。
+
 ### 6.3 与 n8n HTTP 节点的推荐配置
 
 - 调用 Browser Agent 的基础配置：

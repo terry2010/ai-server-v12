@@ -12,6 +12,7 @@ import { N8nModulePage } from '@/pages/ModuleN8n'
 import { DifyModulePage } from '@/pages/ModuleDify'
 import { OneApiModulePage } from '@/pages/ModuleOneApi'
 import { RagFlowModulePage } from '@/pages/ModuleRagFlow'
+import { BrowserAgentPage } from '@/pages/BrowserAgent'
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
           <Route path="dify" element={<DifyModulePage />} />
           <Route path="oneapi" element={<OneApiModulePage />} />
           <Route path="ragflow" element={<RagFlowModulePage />} />
+          <Route path="browser-agent" element={<BrowserAgentPage />} />
         </Route>
       </Routes>
       <Toaster position="top-right" richColors closeButton />

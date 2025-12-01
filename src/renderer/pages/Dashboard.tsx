@@ -1,10 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { ServiceStatus } from '@/components/StatusDot'
-import type { DockerStatus, ModuleId, ModuleInfo, ModuleRuntimeMetrics } from '../../shared/types'
+import { StatusDot, type ServiceStatus } from '@/components/StatusDot'
+import type {
+  DockerStatus,
+  ModuleId,
+  ModuleInfo,
+  ModuleRuntimeMetrics,
+  BrowserAgentRuntimeMetrics,
+} from '../../shared/types'
 import { HeroSection } from './dashboard/HeroSection'
 import { DockerStatusCard } from './dashboard/DockerStatusCard'
 import { ServiceCard } from './dashboard/ServiceCard'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Cpu, MemoryStick, ExternalLink } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 export type ServiceKey = ModuleId
 
@@ -85,6 +94,9 @@ export function DashboardPage() {
   const [services, setServices] = useState<ServiceModule[]>([])
   const [dockerStatus, setDockerStatus] = useState<DockerStatus | null>(null)
   const [isStartingDocker, setIsStartingDocker] = useState(false)
+  const [browserAgentEnabled, setBrowserAgentEnabled] = useState<boolean | null>(null)
+  const [browserAgentPort, setBrowserAgentPort] = useState<number | null>(null)
+  const [browserAgentMetrics, setBrowserAgentMetrics] = useState<BrowserAgentRuntimeMetrics | null>(null)
   const navigate = useNavigate()
 
   const dockerInstalled = dockerStatus?.installed ?? false
@@ -104,6 +116,14 @@ export function DashboardPage() {
       ])
 
       setDockerStatus(dockerStatus)
+      const rawAgent = appSettings && appSettings.browserAgent
+      const enabled = !!(rawAgent && typeof rawAgent.enabled === 'boolean' ? rawAgent.enabled : false)
+      const port =
+        rawAgent && typeof rawAgent.port === 'number' && rawAgent.port > 0 && rawAgent.port < 65536
+          ? rawAgent.port
+          : 26080
+      setBrowserAgentEnabled(enabled)
+      setBrowserAgentPort(port)
       const enabledModules = modules.filter((m) => {
         const moduleSettings = appSettings?.modules?.[m.id]
         if (!moduleSettings) return true
@@ -171,6 +191,32 @@ export function DashboardPage() {
   useEffect(() => {
     reloadStatus()
   }, [reloadStatus])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const load = async () => {
+      try {
+        // 运行时指标获取失败时不影响首页
+        if (!window.api || typeof window.api.browserAgentGetRuntimeMetrics !== 'function') return
+        const result = await window.api.browserAgentGetRuntimeMetrics()
+        if (cancelled) return
+        setBrowserAgentMetrics(result || null)
+      } catch {
+        if (!cancelled) {
+          setBrowserAgentMetrics(null)
+        }
+      }
+    }
+
+    load()
+    const timer = window.setInterval(load, 5000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [])
 
   useEffect(() => {
     const handler = () => {
@@ -393,6 +439,14 @@ export function DashboardPage() {
       />
 
       <div className="grid gap-4 md:grid-cols-2">
+        {browserAgentEnabled && (
+          <BrowserAgentCard
+            enabled={browserAgentEnabled}
+            port={browserAgentPort}
+            runtime={browserAgentMetrics}
+            onOpen={() => navigate('/browser-agent')}
+          />
+        )}
         {services.map((service) => (
           <ServiceCard
             key={service.key}
@@ -404,5 +458,109 @@ export function DashboardPage() {
         ))}
       </div>
     </div>
+  )
+}
+
+interface BrowserAgentCardProps {
+  enabled: boolean
+  port: number | null
+  runtime: BrowserAgentRuntimeMetrics | null
+  onOpen: () => void
+}
+
+function BrowserAgentCard({ enabled, port, runtime, onOpen }: BrowserAgentCardProps) {
+  const cpu = runtime && runtime.cpuUsage != null ? Math.round(runtime.cpuUsage) : 0
+  const memory = runtime && runtime.memoryUsage != null ? Math.round(runtime.memoryUsage) : 0
+  const runningSessions = runtime ? runtime.runningSessions : 0
+  const clamp = (v: number) => {
+    if (Number.isNaN(v)) return 0
+    return Math.max(0, Math.min(100, v))
+  }
+  const cpuBar = clamp(cpu)
+  const memBar = clamp(memory)
+
+  return (
+    <Card className="relative transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl hover:bg-slate-50/100 dark:hover:bg-slate-800/90">
+      <CardHeader>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-sky-50 text-sky-700 shadow-sm">
+                <span className="text-xs font-semibold uppercase">BA</span>
+              </span>
+              <div>
+                <CardTitle>AI 浏览器 · Browser Agent</CardTitle>
+                <CardDescription>查看本地 Browser Agent 执行的历史会话与截图，仅做只读复盘。</CardDescription>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-1 text-xs">
+            <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600 dark:bg-slate-800/80 dark:text-slate-300">
+              <StatusDot status={enabled ? 'running' : 'stopped'} />
+              <span>{enabled ? '已启用' : '未启用'}</span>
+            </div>
+            <div className="flex items-center gap-2 text-[10px] text-slate-400">
+              {port != null && <span>端口 {port}</span>}
+              <span>会话 {runningSessions}</span>
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid gap-3 text-xs text-slate-400 md:grid-cols-2">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-sky-50 text-sky-700">
+              <Cpu className="h-3.5 w-3.5" />
+            </span>
+            <div className="flex-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <span>CPU</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-100">{cpu}%</span>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-full bg-gradient-to-r from-sky-400 to-emerald-400"
+                  style={{ width: `${Math.max(4, cpuBar)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-sky-50 text-sky-700">
+              <MemoryStick className="h-3.5 w-3.5" />
+            </span>
+            <div className="flex-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <span>内存</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-100">{memory}%</span>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-full bg-gradient-to-r from-violet-400 to-sky-400"
+                  style={{ width: `${Math.max(4, memBar)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+          <div className="text-[10px] text-slate-500 dark:text-slate-400">
+            <div>本页不会重新执行历史操作，只从 NDJSON 与截图文件中还原。</div>
+            <div className="mt-1">如需启用/停用 Browser Agent，请前往「系统设置 - Browser Agent」。</div>
+          </div>
+          <Button
+            size="sm"
+            shine
+            className="px-3 text-[11px] bg-gradient-to-r from-sky-500 to-sky-400 text-white shadow-md shadow-sky-300/70 hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-60"
+            disabled={!enabled}
+            onClick={onOpen}
+          >
+            <ExternalLink className="mr-1 h-3 w-3" />
+            打开
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

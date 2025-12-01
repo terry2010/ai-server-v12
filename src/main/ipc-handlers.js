@@ -1,4 +1,4 @@
-import { app, ipcMain, shell, dialog } from 'electron'
+import { app, ipcMain, shell, dialog, BrowserWindow } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { getLogsDir } from './app-paths.js'
@@ -42,6 +42,12 @@ import {
   closeBrowserView,
   controlModuleBrowserView,
 } from './browserview-manager.js'
+import { readNdjson, getBrowserAgentDataRootDir } from './browser-agent-storage.js'
+import {
+  getSession as getBrowserAgentSession,
+  showSession as showBrowserAgentSession,
+  listSessions as listBrowserAgentSessions,
+} from './browser-agent-core.js'
 
 // --- Docker status (real detection) + mock data for Phase 3 (modules & logs) ---
 
@@ -86,6 +92,17 @@ const logs = [
     message: '数据库连接失败，请检查 RAG_FLOW_DB_URL 配置。',
   },
 ]
+
+function getBrowserWindowById(id) {
+  try {
+    if (typeof id !== 'number' || !Number.isFinite(id) || id <= 0) return null
+    const win = BrowserWindow.fromId(id)
+    if (!win || win.isDestroyed()) return null
+    return win
+  } catch {
+    return null
+  }
+}
 
 async function backupN8nDatabaseToFile(filePath) {
   const dbResult = await ensureN8nPostgres()
@@ -1645,7 +1662,686 @@ export function setupIpcHandlers() {
     }
   })
 
-  // BrowserView 集成
+  // Browser Agent UI：基于 NDJSON 的会话查询与截图打开
+
+  ipcMain.handle('browserAgent:listSessions', async (_event, payload) => {
+    try {
+      const date =
+        payload && typeof payload.date === 'string' && payload.date.trim()
+          ? payload.date.trim()
+          : undefined
+      const profileFilter =
+        payload && typeof payload.profile === 'string' && payload.profile.trim()
+          ? payload.profile.trim()
+          : ''
+      const clientIdFilter =
+        payload && typeof payload.clientId === 'string' && payload.clientId.trim()
+          ? payload.clientId.trim()
+          : ''
+      const statusFilterRaw = payload && typeof payload.status === 'string' ? payload.status : 'all'
+      const statusFilter = statusFilterRaw === 'running' || statusFilterRaw === 'closed' ? statusFilterRaw : 'all'
+
+      /** @type {any[]} */
+      const sessionRecords = readNdjson('sessions', date)
+      /** @type {any[]} */
+      const actionRecords = readNdjson('actions', date)
+
+      const normalizeStatus = (value) => {
+        const raw = typeof value === 'string' ? value.toLowerCase() : ''
+        if (raw === 'running') return 'running'
+        if (raw === 'closed') return 'closed'
+        return 'error'
+      }
+
+      /** @type {Map<string, import('../shared/types').BrowserAgentSessionSummary>} */
+      const map = new Map()
+
+      for (const rec of sessionRecords) {
+        if (!rec || typeof rec !== 'object') continue
+        const rawId = rec.sessionId
+        const sessionId = typeof rawId === 'string' && rawId.trim() ? rawId.trim() : ''
+        if (!sessionId) continue
+
+        let summary = map.get(sessionId)
+        if (!summary) {
+          summary = {
+            sessionId,
+            profile: null,
+            clientId: null,
+            status: 'error',
+            createdAt: null,
+            finishedAt: null,
+            lastErrorCode: null,
+            lastErrorMessage: null,
+            actionsCount: 0,
+            lastActionAt: null,
+            lastActionType: null,
+            domain: null,
+          }
+          map.set(sessionId, summary)
+        }
+
+        if (typeof rec.profile === 'string') {
+          summary.profile = rec.profile || null
+        }
+        if (typeof rec.clientId === 'string') {
+          summary.clientId = rec.clientId || null
+        }
+
+        const createdAt = typeof rec.createdAt === 'string' && rec.createdAt ? rec.createdAt : null
+        if (createdAt && (!summary.createdAt || createdAt < summary.createdAt)) {
+          summary.createdAt = createdAt
+        }
+
+        const finishedAt = typeof rec.finishedAt === 'string' && rec.finishedAt ? rec.finishedAt : null
+        if (finishedAt && (!summary.finishedAt || finishedAt > summary.finishedAt)) {
+          summary.finishedAt = finishedAt
+        }
+
+        const status = normalizeStatus(rec.status)
+
+        // 规则：
+        // 1. 一旦出现 closed 记录，最终状态锁定为 closed；
+        // 2. 在没有 closed 的前提下，如果有 running 则为 running；
+        // 3. 没有 running/closed 时为 error。
+        if (status === 'closed') {
+          summary.status = 'closed'
+        } else if (status === 'running' && summary.status !== 'closed') {
+          summary.status = 'running'
+        }
+
+        if (typeof rec.lastErrorCode === 'string') {
+          summary.lastErrorCode = rec.lastErrorCode || null
+        }
+        if (typeof rec.lastErrorMessage === 'string') {
+          summary.lastErrorMessage = rec.lastErrorMessage || null
+        }
+      }
+
+      for (const rec of actionRecords) {
+        if (!rec || typeof rec !== 'object') continue
+        const rawId = rec.sessionId
+        const sessionId = typeof rawId === 'string' && rawId.trim() ? rawId.trim() : ''
+        if (!sessionId) continue
+
+        let summary = map.get(sessionId)
+        if (!summary) {
+          summary = {
+            sessionId,
+            profile: null,
+            clientId: null,
+            status: 'error',
+            createdAt: null,
+            finishedAt: null,
+            lastErrorCode: null,
+            lastErrorMessage: null,
+            actionsCount: 0,
+            lastActionAt: null,
+            lastActionType: null,
+            domain: null,
+          }
+          map.set(sessionId, summary)
+        }
+
+        summary.actionsCount += 1
+
+        const startAt = typeof rec.startAt === 'string' && rec.startAt ? rec.startAt : null
+        const endAt = typeof rec.endAt === 'string' && rec.endAt ? rec.endAt : null
+        const ts = endAt || startAt
+        if (ts && (!summary.lastActionAt || ts > summary.lastActionAt)) {
+          summary.lastActionAt = ts
+          summary.lastActionType = typeof rec.type === 'string' ? rec.type : null
+        }
+
+        // 提取域名：优先使用 navigate 动作中的 URL
+        try {
+          const rawType = typeof rec.type === 'string' ? rec.type.toLowerCase() : ''
+          if (!summary.domain && rawType === 'navigate') {
+            const params = rec && typeof rec.params === 'object' ? rec.params : null
+            const rawUrl = params && typeof params.url === 'string' ? params.url.trim() : ''
+            if (rawUrl) {
+              let domain = ''
+              try {
+                const u = new URL(rawUrl)
+                domain = u.hostname || ''
+              } catch {
+                domain = rawUrl
+              }
+              if (domain) {
+                summary.domain = domain
+              }
+            }
+          }
+        } catch {}
+      }
+
+      let items = Array.from(map.values())
+
+      // 如果某个 session 在 NDJSON 中仍为 running，但当前内存中已经没有对应 session，
+      // 则将其视为已结束的历史会话，状态标记为 closed，避免显示为“运行中”。
+      try {
+        items.forEach((s) => {
+          if (!s || s.status !== 'running') return
+          try {
+            const live = getBrowserAgentSession(s.sessionId)
+            if (!live) {
+              s.status = 'closed'
+            }
+          } catch {}
+        })
+      } catch {}
+
+      if (profileFilter) {
+        items = items.filter((s) => s.profile === profileFilter)
+      }
+      if (clientIdFilter) {
+        items = items.filter((s) => s.clientId === clientIdFilter)
+      }
+      if (statusFilter !== 'all') {
+        items = items.filter((s) => s.status === statusFilter)
+      }
+
+      items.sort((a, b) => {
+        const aKey = a.lastActionAt || a.createdAt || ''
+        const bKey = b.lastActionAt || b.createdAt || ''
+        if (!aKey && !bKey) return 0
+        if (!aKey) return 1
+        if (!bKey) return -1
+        if (aKey === bKey) return 0
+        return aKey < bKey ? 1 : -1
+      })
+
+      return { items }
+    } catch {
+      return { items: [] }
+    }
+  })
+
+  ipcMain.handle('browserAgent:getSessionDetail', async (_event, payload) => {
+    try {
+      const sessionId =
+        payload && typeof payload.sessionId === 'string' && payload.sessionId.trim()
+          ? payload.sessionId.trim()
+          : ''
+      if (!sessionId) return null
+
+      const date =
+        payload && typeof payload.date === 'string' && payload.date.trim()
+          ? payload.date.trim()
+          : undefined
+
+      /** @type {any[]} */
+      const sessionRecords = readNdjson('sessions', date)
+      /** @type {any[]} */
+      const actionRecords = readNdjson('actions', date)
+      /** @type {any[]} */
+      const snapshotRecords = readNdjson('snapshots', date)
+      /** @type {any[]} */
+      const fileRecords = readNdjson('files', date)
+
+      const normalizeStatus = (value) => {
+        const raw = typeof value === 'string' ? value.toLowerCase() : ''
+        if (raw === 'running') return 'running'
+        if (raw === 'closed') return 'closed'
+        return 'error'
+      }
+
+      /** @type {import('../shared/types').BrowserAgentSessionSummary | null} */
+      let summary = null
+
+      for (const rec of sessionRecords) {
+        if (!rec || typeof rec !== 'object') continue
+        const rawId = rec.sessionId
+        const sid = typeof rawId === 'string' && rawId.trim() ? rawId.trim() : ''
+        if (!sid || sid !== sessionId) continue
+
+        if (!summary) {
+          summary = {
+            sessionId,
+            profile: null,
+            clientId: null,
+            status: 'error',
+            createdAt: null,
+            finishedAt: null,
+            lastErrorCode: null,
+            lastErrorMessage: null,
+            actionsCount: 0,
+            lastActionAt: null,
+            lastActionType: null,
+            domain: null,
+          }
+        }
+
+        if (typeof rec.profile === 'string') {
+          summary.profile = rec.profile || null
+        }
+        if (typeof rec.clientId === 'string') {
+          summary.clientId = rec.clientId || null
+        }
+
+        const createdAt = typeof rec.createdAt === 'string' && rec.createdAt ? rec.createdAt : null
+        if (createdAt && (!summary.createdAt || createdAt < summary.createdAt)) {
+          summary.createdAt = createdAt
+        }
+
+        const finishedAt = typeof rec.finishedAt === 'string' && rec.finishedAt ? rec.finishedAt : null
+        if (finishedAt && (!summary.finishedAt || finishedAt > summary.finishedAt)) {
+          summary.finishedAt = finishedAt
+        }
+
+        const status = normalizeStatus(rec.status)
+        if (summary.status !== 'closed') {
+          if (summary.status === 'error') {
+            if (status === 'running' || status === 'closed') {
+              summary.status = status
+            }
+          } else if (status === 'closed') {
+            summary.status = 'closed'
+          } else if (status === 'running') {
+            summary.status = 'running'
+          }
+        }
+
+        if (typeof rec.lastErrorCode === 'string') {
+          summary.lastErrorCode = rec.lastErrorCode || null
+        }
+        if (typeof rec.lastErrorMessage === 'string') {
+          summary.lastErrorMessage = rec.lastErrorMessage || null
+        }
+      }
+
+      /** @type {Map<string, any>} */
+      const snapshotById = new Map()
+      for (const rec of snapshotRecords) {
+        if (!rec || typeof rec !== 'object') continue
+        const rawId = rec.snapshotId
+        const sid = typeof rawId === 'string' && rawId.trim() ? rawId.trim() : ''
+        if (!sid) continue
+        snapshotById.set(sid, rec)
+      }
+
+      /** @type {Map<string, any>} */
+      const fileByPath = new Map()
+      for (const rec of fileRecords) {
+        if (!rec || typeof rec !== 'object') continue
+        const rawPath = rec.path
+        const p = typeof rawPath === 'string' && rawPath.trim() ? rawPath.trim() : ''
+        if (!p) continue
+        fileByPath.set(p, rec)
+      }
+
+      /** @type {import('../shared/types').BrowserAgentActionTimelineItem[]} */
+      const actions = []
+
+      for (const rec of actionRecords) {
+        if (!rec || typeof rec !== 'object') continue
+        const rawSessionId = rec.sessionId
+        const sid = typeof rawSessionId === 'string' && rawSessionId.trim() ? rawSessionId.trim() : ''
+        if (!sid || sid !== sessionId) continue
+
+        const rawId = rec.id
+        const id = typeof rawId === 'string' && rawId.trim() ? rawId.trim() : ''
+        if (!id) continue
+
+        const type = typeof rec.type === 'string' ? rec.type : ''
+        const params = rec && typeof rec.params === 'object' ? rec.params : null
+        const startAt = typeof rec.startAt === 'string' && rec.startAt ? rec.startAt : null
+        const endAt = typeof rec.endAt === 'string' && rec.endAt ? rec.endAt : null
+
+        let durationMs = null
+        if (startAt && endAt) {
+          const startMs = Date.parse(startAt)
+          const endMs = Date.parse(endAt)
+          if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs) {
+            durationMs = endMs - startMs
+          }
+        }
+
+        const rawStatus = typeof rec.status === 'string' ? rec.status.toLowerCase() : ''
+        const status = rawStatus === 'error' ? 'error' : 'ok'
+        const errorCode = typeof rec.errorCode === 'string' ? rec.errorCode || null : null
+        const errorMessage = typeof rec.errorMessage === 'string' ? rec.errorMessage || null : null
+        const snapshotId =
+          typeof rec.snapshotId === 'string' && rec.snapshotId.trim()
+            ? rec.snapshotId.trim()
+            : null
+
+        /** @type {import('../shared/types').BrowserAgentActionTimelineItem['screenshot']} */
+        let screenshot = null
+        if (snapshotId) {
+          const snap = snapshotById.get(snapshotId)
+          if (snap && typeof snap === 'object') {
+            const rawPath = snap.path
+            const relPath = typeof rawPath === 'string' && rawPath.trim() ? rawPath.trim() : ''
+            const file = relPath ? fileByPath.get(relPath) : null
+
+            screenshot = {
+              snapshotId,
+              description:
+                typeof snap.description === 'string' && snap.description
+                  ? snap.description
+                  : null,
+              path: relPath,
+              fileSize:
+                file && typeof file.size === 'number' && Number.isFinite(file.size)
+                  ? file.size
+                  : null,
+              mimeType:
+                file && typeof file.mimeType === 'string' && file.mimeType
+                  ? file.mimeType
+                  : null,
+            }
+          }
+        }
+
+        actions.push({
+          id,
+          sessionId,
+          type,
+          params,
+          startAt,
+          endAt,
+          durationMs,
+          status,
+          errorCode,
+          errorMessage,
+          snapshotId,
+          screenshot,
+        })
+      }
+
+      actions.sort((a, b) => {
+        const aKey = a.startAt || a.endAt || ''
+        const bKey = b.startAt || b.endAt || ''
+        if (!aKey && !bKey) return 0
+        if (!aKey) return 1
+        if (!bKey) return -1
+        if (aKey === bKey) return 0
+        return aKey < bKey ? -1 : 1
+      })
+
+      if (!summary && actions.length === 0) {
+        return null
+      }
+
+      if (!summary) {
+        summary = {
+          sessionId,
+          profile: null,
+          clientId: null,
+          status: 'error',
+          createdAt: null,
+          finishedAt: null,
+          lastErrorCode: null,
+          lastErrorMessage: null,
+          actionsCount: 0,
+          lastActionAt: null,
+          lastActionType: null,
+          domain: null,
+        }
+      }
+
+      summary.actionsCount = actions.length
+      if (actions.length > 0) {
+        const last = actions[actions.length - 1]
+        summary.lastActionAt = last.endAt || last.startAt || summary.lastActionAt
+        summary.lastActionType = last.type || summary.lastActionType
+      }
+
+      return {
+        session: summary,
+        actions,
+      }
+    } catch {
+      return null
+    }
+  })
+
+  ipcMain.handle('browserAgent:showSessionWindow', async (_event, payload) => {
+    try {
+      const sessionId =
+        payload && typeof payload.sessionId === 'string' && payload.sessionId.trim()
+          ? payload.sessionId.trim()
+          : ''
+      if (!sessionId) {
+        return { success: false, reason: 'invalid_session_id', error: '无效的 Session ID。' }
+      }
+
+      const existing = getBrowserAgentSession(sessionId)
+      if (!existing) {
+        return {
+          success: false,
+          reason: 'session_not_found',
+          error: 'Session 已不在内存中，可能已结束或应用已重启。',
+        }
+      }
+
+      const updated = showBrowserAgentSession(sessionId) || existing
+      const rawWindowId = updated && updated.windowId
+      const windowId =
+        typeof rawWindowId === 'number' && Number.isFinite(rawWindowId) && rawWindowId > 0
+          ? rawWindowId
+          : null
+
+      if (!windowId) {
+        return {
+          success: false,
+          reason: 'no_window_id',
+          error: '该 Session 没有关联窗口，可能从未成功打开浏览器。',
+        }
+      }
+
+      const win = getBrowserWindowById(windowId)
+      if (!win) {
+        return {
+          success: false,
+          reason: 'window_closed',
+          error: '浏览器窗口已关闭，无法再次显示。',
+        }
+      }
+
+      try {
+        win.show()
+        win.focus()
+      } catch {}
+
+      return { success: true }
+    } catch (error) {
+      const message = error && error.message ? String(error.message) : String(error || '')
+      return { success: false, reason: 'error', error: message }
+    }
+  })
+
+  ipcMain.handle('browserAgent:openSnapshot', async (_event, payload) => {
+    try {
+      const snapshotId =
+        payload && typeof payload.snapshotId === 'string' && payload.snapshotId.trim()
+          ? payload.snapshotId.trim()
+          : ''
+      if (!snapshotId) {
+        return { success: false, error: '无效的截图 ID。' }
+      }
+
+      const date =
+        payload && typeof payload.date === 'string' && payload.date.trim()
+          ? payload.date.trim()
+          : undefined
+
+      /** @type {any[]} */
+      const snapshotRecords = readNdjson('snapshots', date)
+
+      let target = null
+      for (const rec of snapshotRecords) {
+        if (!rec || typeof rec !== 'object') continue
+        const rawId = rec.snapshotId
+        const sid = typeof rawId === 'string' && rawId.trim() ? rawId.trim() : ''
+        if (!sid) continue
+        if (sid === snapshotId) {
+          target = rec
+          break
+        }
+      }
+
+      if (!target) {
+        return { success: false, error: '未找到对应截图元数据。' }
+      }
+
+      const root = getBrowserAgentDataRootDir()
+      if (!root) {
+        return { success: false, error: 'Browser Agent 数据目录未配置或不可用。' }
+      }
+
+      const rawPath = target.path
+      const relPath = typeof rawPath === 'string' && rawPath.trim() ? rawPath.trim() : ''
+      if (!relPath) {
+        return { success: false, error: '截图路径信息不完整。' }
+      }
+
+      const absPath = path.isAbsolute(relPath) ? relPath : path.join(root, relPath)
+
+      try {
+        const st = fs.statSync(absPath)
+        if (!st || !st.isFile()) {
+          return { success: false, error: '截图文件不存在或已被删除。' }
+        }
+      } catch {
+        return { success: false, error: '截图文件不存在或已被删除。' }
+      }
+
+      try {
+        const result = await shell.openPath(absPath)
+        if (typeof result === 'string' && result.trim()) {
+          return { success: false, error: result.trim() }
+        }
+      } catch (error) {
+        const message = error && error.message ? String(error.message) : String(error || '')
+        return { success: false, error: message }
+      }
+
+      return { success: true, error: null }
+    } catch (error) {
+      const message = error && error.message ? String(error.message) : String(error || '')
+      return { success: false, error: message }
+    }
+  })
+
+  ipcMain.handle('browserAgent:getRuntimeMetrics', async () => {
+    try {
+      if (!app || typeof app.getAppMetrics !== 'function') {
+        return {
+          cpuUsage: 0,
+          memoryUsage: 0,
+          runningSessions: 0,
+          windowsCount: 0,
+        }
+      }
+
+      /** @type {any[]} */
+      let running = []
+      try {
+        running = listBrowserAgentSessions({ status: 'running' }) || []
+      } catch {
+        running = []
+      }
+
+      const windowIds = []
+      for (const s of running) {
+        if (!s || typeof s.windowId !== 'number') continue
+        const id = s.windowId
+        if (!Number.isFinite(id) || id <= 0) continue
+        windowIds.push(id)
+      }
+
+      if (windowIds.length === 0) {
+        return {
+          cpuUsage: 0,
+          memoryUsage: 0,
+          runningSessions: running.length,
+          windowsCount: 0,
+        }
+      }
+
+      const pids = new Set()
+      for (const id of windowIds) {
+        try {
+          const win = getBrowserWindowById(id)
+          if (!win) continue
+          const contents = win.webContents
+          if (!contents) continue
+          let pid = null
+          if (typeof contents.getOSProcessId === 'function') {
+            pid = contents.getOSProcessId()
+          } else if (typeof contents.getProcessId === 'function') {
+            pid = contents.getProcessId()
+          }
+          if (typeof pid === 'number' && Number.isFinite(pid) && pid > 0) {
+            pids.add(pid)
+          }
+        } catch {}
+      }
+
+      if (pids.size === 0) {
+        return {
+          cpuUsage: 0,
+          memoryUsage: 0,
+          runningSessions: running.length,
+          windowsCount: windowIds.length,
+        }
+      }
+
+      let totalCpu = 0
+      let totalMem = 0
+
+      try {
+        const metrics = app.getAppMetrics() || []
+        for (const m of metrics) {
+          if (!m || !pids.has(m.pid)) continue
+          try {
+            const cpu = m.cpu && typeof m.cpu.percentCPUUsage === 'number' ? m.cpu.percentCPUUsage : 0
+            const memKb =
+              m.memory && typeof m.memory.workingSetSize === 'number' ? m.memory.workingSetSize : 0
+            if (cpu > 0) totalCpu += cpu
+            if (memKb > 0) {
+              totalMem += memKb * 1024
+            }
+          } catch {}
+        }
+      } catch {}
+
+      const clamp = (v) => {
+        if (v == null || Number.isNaN(v)) return 0
+        return Math.max(0, Math.min(100, v))
+      }
+
+      let cpuPercent = clamp(totalCpu)
+      let memPercent = 0
+
+      if (totalMem > 0) {
+        try {
+          const memInfo = await si.mem()
+          const total = typeof memInfo.total === 'number' ? memInfo.total : 0
+          if (total > 0) {
+            memPercent = clamp((totalMem / total) * 100)
+          }
+        } catch {}
+      }
+
+      return {
+        cpuUsage: cpuPercent,
+        memoryUsage: memPercent,
+        runningSessions: running.length,
+        windowsCount: windowIds.length,
+      }
+    } catch {
+      return {
+        cpuUsage: 0,
+        memoryUsage: 0,
+        runningSessions: 0,
+        windowsCount: 0,
+      }
+    }
+  })
+
   ipcMain.handle('browserView:openModule', async (_event, payload) => {
     const moduleId = payload && typeof payload.moduleId === 'string' ? payload.moduleId : undefined
     return openModuleBrowserView(moduleId)

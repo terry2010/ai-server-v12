@@ -9,6 +9,9 @@ import type {
   DockerActionResult,
   SystemMetrics,
   ModuleRuntimeMetrics,
+  BrowserAgentSessionSummary,
+  BrowserAgentSessionDetail,
+  BrowserAgentRuntimeMetrics,
 } from './types'
 
 export interface WindowApi {
@@ -61,11 +64,34 @@ export interface WindowApi {
     error?: string
     cancelled?: boolean
   }>
+  browserAgentGetRuntimeMetrics(): Promise<BrowserAgentRuntimeMetrics>
   restoreModuleData(
     moduleId: ModuleId,
   ): Promise<{
     success: boolean
     error?: string
     cancelled?: boolean
+  }>
+  browserAgentListSessions(params: {
+    date?: string
+    profile?: string
+    clientId?: string
+    status?: 'all' | 'running' | 'closed'
+  }): Promise<{ items: BrowserAgentSessionSummary[] }>
+  browserAgentGetSessionDetail(params: {
+    sessionId: string
+    date?: string
+  }): Promise<BrowserAgentSessionDetail | null>
+  browserAgentShowSessionWindow(sessionId: string): Promise<{
+    success: boolean
+    reason?: 'invalid_session_id' | 'session_not_found' | 'no_window_id' | 'window_closed' | 'error'
+    error?: string
+  }>
+  browserAgentOpenSnapshot(params: {
+    snapshotId: string
+    date?: string
+  }): Promise<{
+    success: boolean
+    error?: string
   }>
 }

@@ -58,6 +58,8 @@ export function AppLayout() {
   const [expandedModuleOrder, setExpandedModuleOrder] = useState<
     ('n8n' | 'dify' | 'oneapi' | 'ragflow')[] | null
   >(null)
+  const [expandedLikeOrder, setExpandedLikeOrder] = useState<ModuleLikeId[] | null>(null)
+  const prevIsModuleLikeRouteRef = useRef(false)
   const [currentModuleMetrics, setCurrentModuleMetrics] = useState<
     | {
         cpuUsage: number | null
@@ -241,6 +243,16 @@ export function AppLayout() {
         if (!prev) return prev
         const fromIndex = prev.indexOf(fromKey as any)
         const toIndex = prev.indexOf(toKey as any)
+        if (fromIndex === -1 || toIndex === -1) return prev
+        const next = prev.slice()
+        const [moved] = next.splice(fromIndex, 1)
+        next.splice(toIndex, 0, moved)
+        return next
+      })
+      setExpandedLikeOrder((prev) => {
+        if (!prev || !prev.length) return prev
+        const fromIndex = prev.indexOf(fromKey as ModuleLikeId)
+        const toIndex = prev.indexOf(toKey as ModuleLikeId)
         if (fromIndex === -1 || toIndex === -1) return prev
         const next = prev.slice()
         const [moved] = next.splice(fromIndex, 1)
@@ -482,15 +494,69 @@ export function AppLayout() {
   useEffect(() => {
     const prevExpanded = prevModuleTabsExpandedRef.current
     const justExpanded = !prevExpanded && moduleTabsExpanded
-    prevModuleTabsExpandedRef.current = moduleTabsExpanded
+    const prevIsModuleLikeRoute = prevIsModuleLikeRouteRef.current
+    const justEnteredModuleLike = !prevIsModuleLikeRoute && isModuleLikeRoute && moduleTabsExpanded
 
-    if (justExpanded && currentModuleId) {
-      // 仅在从收起 → 展开这一刻，根据当前可见模块生成一次展开态的顺序：严格按 moduleTabOrder 的既有顺序
-      setExpandedModuleOrder((prev) => {
-        if (prev) return prev
-        const base = moduleTabOrder.filter((id) => isModuleVisible(id) || id === currentModuleId)
-        if (!base.length) return prev
-        return base
+    prevModuleTabsExpandedRef.current = moduleTabsExpanded
+    prevIsModuleLikeRouteRef.current = isModuleLikeRoute
+
+    if ((justExpanded && isModuleLikeRoute) || justEnteredModuleLike) {
+      if (currentModuleId && isModuleRoute) {
+        // 仅在“已经在模块路由下，从收起 → 展开”这一刻生成展开顺序：当前模块优先，其余保持 moduleTabOrder 顺序
+        setExpandedModuleOrder((prev) => {
+          if (prev) return prev
+          const base = moduleTabOrder.filter((id) => isModuleVisible(id) || id === currentModuleId)
+          if (!base.length) return prev
+          if (!base.includes(currentModuleId)) return base
+          const ordered: ('n8n' | 'dify' | 'oneapi' | 'ragflow')[] = [currentModuleId]
+          for (const id of base) {
+            if (id !== currentModuleId) {
+              ordered.push(id)
+            }
+          }
+          return ordered
+        })
+      } else {
+        setExpandedModuleOrder((prev) => {
+          if (prev) return prev
+          const base = moduleTabOrder.filter((id) => isModuleVisible(id))
+          if (!base.length) return prev
+          return base
+        })
+      }
+
+      setExpandedLikeOrder((prev) => {
+        if (prev && prev.length > 0) return prev
+        const baseModules = moduleTabOrder.filter((id) => isModuleVisible(id) || id === currentModuleId)
+        const currentLike: ModuleLikeId | null = isBrowserAgentRoute
+          ? isBrowserAgentVisible
+            ? 'browser-agent'
+            : null
+          : currentModuleId
+        const orderedLikeIds: ModuleLikeId[] = []
+
+        if (currentLike && isModuleLikeVisible(currentLike)) {
+          orderedLikeIds.push(currentLike)
+        }
+
+        if (isBrowserAgentVisible && currentLike !== 'browser-agent') {
+          orderedLikeIds.push('browser-agent')
+        }
+
+        for (const id of baseModules) {
+          if (id !== currentModuleId && isModuleLikeVisible(id)) {
+            orderedLikeIds.push(id)
+          }
+        }
+
+        const result: ModuleLikeId[] = []
+        for (const id of orderedLikeIds) {
+          if (!result.includes(id)) {
+            result.push(id)
+          }
+        }
+
+        return result.length ? result : prev
       })
 
       // 用户在展开态已经看到所有模块标签一次了，30 秒新启动提示可以视为已“读过”，收起后不再额外保留
@@ -504,10 +570,21 @@ export function AppLayout() {
           ragflow: 0,
         }
       })
-    } else if (!moduleTabsExpanded) {
+    } else if (!moduleTabsExpanded || !isModuleLikeRoute) {
       setExpandedModuleOrder(null)
+      setExpandedLikeOrder(null)
     }
-  }, [moduleTabsExpanded, currentModuleId, moduleTabOrder, n8nEnabled, oneapiEnabled, runningModules])
+  }, [
+    moduleTabsExpanded,
+    currentModuleId,
+    moduleTabOrder,
+    n8nEnabled,
+    oneapiEnabled,
+    runningModules,
+    isModuleLikeRoute,
+    isBrowserAgentRoute,
+    isBrowserAgentVisible,
+  ])
 
   return (
     <div
@@ -628,45 +705,76 @@ export function AppLayout() {
                         )
                     }
 
-                    const orderForExpanded =
+                    const moduleOrderForExpanded =
                       expandedModuleOrder && expandedModuleOrder.length > 0
-                        ? (expandedModuleOrder as ModuleLikeId[])
-                        : (baseVisible as ModuleLikeId[])
+                        ? expandedModuleOrder
+                        : baseVisible
 
                     const items: JSX.Element[] = []
 
-                    if (isBrowserAgentVisible) {
-                      items.push(
-                        renderModuleLikeTab('browser-agent', {
-                          variant: 'button',
-                        }),
-                      )
-                    }
+                    const orderedLikeIds: ModuleLikeId[] =
+                      expandedLikeOrder && expandedLikeOrder.length > 0
+                        ? expandedLikeOrder.filter((id) => isModuleLikeVisible(id))
+                        : (() => {
+                            const fallback: ModuleLikeId[] = []
+                            const currentLike: ModuleLikeId | null = isBrowserAgentRoute
+                              ? isBrowserAgentVisible
+                                ? 'browser-agent'
+                                : null
+                              : currentModuleId
 
-                    const mappedTabs = orderForExpanded
-                      .filter((id) => baseVisible.includes(id as any))
-                      .map((id) =>
-                        renderModuleLikeTab(id, {
-                          variant: 'button',
-                          draggable: true,
-                          onDragStart: () => setDraggingModuleKey(id),
-                          onDragOver: (e) => {
-                            e.preventDefault()
-                            if (draggingModuleKey) {
-                              reorderModuleTabs(draggingModuleKey, id)
+                            if (currentLike && isModuleLikeVisible(currentLike)) {
+                              fallback.push(currentLike)
                             }
-                          },
-                          onDrop: (e) => {
-                            e.preventDefault()
-                            setDraggingModuleKey(null)
-                          },
-                          onDragEnd: () => {
-                            setDraggingModuleKey(null)
-                          },
-                        }),
-                      )
 
-                    items.push(...mappedTabs)
+                            if (isBrowserAgentVisible && currentLike !== 'browser-agent') {
+                              fallback.push('browser-agent')
+                            }
+
+                            for (const id of moduleOrderForExpanded) {
+                              if (
+                                id !== currentModuleId &&
+                                isModuleLikeVisible(id) &&
+                                !fallback.includes(id)
+                              ) {
+                                fallback.push(id)
+                              }
+                            }
+
+                            return fallback
+                          })()
+
+                    for (const id of orderedLikeIds) {
+                      if (id === 'browser-agent') {
+                        items.push(
+                          renderModuleLikeTab('browser-agent', {
+                            variant: 'button',
+                          }),
+                        )
+                      } else {
+                        const moduleId = id as 'n8n' | 'dify' | 'oneapi' | 'ragflow'
+                        items.push(
+                          renderModuleLikeTab(moduleId, {
+                            variant: 'button',
+                            draggable: true,
+                            onDragStart: () => setDraggingModuleKey(moduleId),
+                            onDragOver: (e) => {
+                              e.preventDefault()
+                              if (draggingModuleKey) {
+                                reorderModuleTabs(draggingModuleKey, moduleId)
+                              }
+                            },
+                            onDrop: (e) => {
+                              e.preventDefault()
+                              setDraggingModuleKey(null)
+                            },
+                            onDragEnd: () => {
+                              setDraggingModuleKey(null)
+                            },
+                          }),
+                        )
+                      }
+                    }
 
                     return items
                   })()}

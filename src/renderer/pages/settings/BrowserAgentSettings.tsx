@@ -71,7 +71,7 @@ export function BrowserAgentSettings({ settings, loading, saving, onChange, onSa
   return (
     <Card className="border-none bg-transparent shadow-none">
       <CardHeader className="px-0">
-        <CardTitle>Browser Agent 设置</CardTitle>
+        <CardTitle>AI浏览器设置</CardTitle>
         <CardDescription>
           配置用于 n8n 等调用的本地 Browser Agent HTTP 服务。当前仅监听 127.0.0.1，建议为生产环境设置强随机 token。
         </CardDescription>

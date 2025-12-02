@@ -26,7 +26,7 @@ import { Field } from './settings/Field'
 const tabs = [
   { key: 'system', label: '系统设置', icon: SlidersHorizontal },
   { key: 'network', label: '网络设置', icon: Network },
-  { key: 'agent', label: 'Agent 设置', icon: Terminal },
+  { key: 'agent', label: 'AI浏览器设置', icon: Terminal },
   { key: 'n8n', label: 'n8n 设置', icon: Terminal },
   { key: 'dify', label: 'Dify 设置', icon: Terminal },
   { key: 'oneapi', label: 'OneAPI 设置', icon: Terminal },

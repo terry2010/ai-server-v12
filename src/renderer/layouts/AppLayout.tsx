@@ -21,26 +21,14 @@ import { StatusDot, type ServiceStatus } from '@/components/StatusDot'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/hooks/useTheme'
 
-interface TopTab {
-  key: string
-  label: string
-  path: string
-  status?: ServiceStatus
-}
-
-const topTabs: TopTab[] = [
-  { key: 'dashboard', label: '首页', path: '/' },
-  { key: 'n8n', label: 'n8n', path: '/n8n', status: 'running' },
-  { key: 'dify', label: 'Dify', path: '/dify', status: 'stopped' },
-  { key: 'oneapi', label: 'OneAPI', path: '/oneapi', status: 'running' },
-  { key: 'ragflow', label: 'RagFlow', path: '/ragflow', status: 'error' },
-]
+type ModuleLikeId = 'browser-agent' | 'n8n' | 'dify' | 'oneapi' | 'ragflow'
 
 export function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
   const [theme, setTheme] = useTheme()
   const [systemName, setSystemName] = useState('AI-Server')
+  const [browserAgentEnabled, setBrowserAgentEnabled] = useState(false)
   const [n8nEnabled, setN8nEnabled] = useState(true)
   const [oneapiEnabled, setOneapiEnabled] = useState(true)
   const navigate = useNavigate()
@@ -130,6 +118,99 @@ export function AppLayout() {
     return 'RagFlow'
   }
 
+  const isBrowserAgentVisible = !!browserAgentEnabled
+
+  const isModuleLikeVisible = (id: ModuleLikeId) => {
+    if (id === 'browser-agent') return isBrowserAgentVisible
+    return isModuleVisible(id)
+  }
+
+  const getModuleLikeLabel = (id: ModuleLikeId) => {
+    if (id === 'browser-agent') return 'AI 浏览器'
+    return getModuleLabel(id as 'n8n' | 'dify' | 'oneapi' | 'ragflow')
+  }
+
+  const renderModuleLikeTab = (
+    id: ModuleLikeId,
+    options?: {
+      variant?: 'nav' | 'button'
+      onBeforeNavigate?: () => void
+      draggable?: boolean
+      onDragStart?: () => void
+      onDragOver?: (e: React.DragEvent<HTMLButtonElement>) => void
+      onDrop?: (e: React.DragEvent<HTMLButtonElement>) => void
+      onDragEnd?: () => void
+    },
+  ) => {
+    const variant = options?.variant ?? 'nav'
+    const isBrowserAgent = id === 'browser-agent'
+    const path = isBrowserAgent ? '/browser-agent' : `/${id}`
+    const isActive = isBrowserAgent
+      ? location.pathname.startsWith('/browser-agent')
+      : location.pathname.startsWith(path)
+
+    let status: ServiceStatus
+    if (isBrowserAgent) {
+      status = browserAgentEnabled ? 'running' : 'stopped'
+    } else {
+      const moduleId = id as 'n8n' | 'dify' | 'oneapi' | 'ragflow'
+      status = runningModules[moduleId] ? 'running' : 'stopped'
+    }
+
+    const className = cn(
+      'group flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150',
+      isActive
+        ? 'bg-white text-slate-900 shadow-[0_1px_4px_rgba(15,23,42,0.22)] ring-1 ring-sky-200/80 dark:bg-slate-100 dark:text-slate-900 dark:ring-sky-300/70'
+        : 'text-slate-600/80 hover:bg-white/40 hover:text-slate-900 dark:text-slate-300/80 dark:hover:bg-slate-800/70 dark:hover:text-slate-50',
+    )
+
+    const label = getModuleLikeLabel(id)
+
+    if (variant === 'nav') {
+      return (
+        <NavLink
+          key={id}
+          to={path}
+          onClick={() => {
+            options?.onBeforeNavigate?.()
+          }}
+          className={className}
+        >
+          <StatusDot status={status} />
+          <span>{label}</span>
+        </NavLink>
+      )
+    }
+
+    const handleClick = () => {
+      options?.onBeforeNavigate?.()
+      navigate(path)
+      if (!isBrowserAgent) {
+        try {
+          window.api.openModuleView(id as 'n8n' | 'dify' | 'oneapi' | 'ragflow').catch(() => {})
+        } catch {
+        }
+      }
+    }
+
+    return (
+      <button
+        key={id}
+        type="button"
+        className={className}
+        onClick={handleClick}
+        draggable={options?.draggable}
+        onDragStart={options?.onDragStart}
+        onDragOver={options?.onDragOver}
+        onDrop={options?.onDrop}
+        onDragEnd={options?.onDragEnd}
+      >
+        <StatusDot status={status} />
+        <span>{label}</span>
+      </button>
+    )
+  }
+
   const formatPercent = (value: number | null | undefined) => {
     if (value == null || Number.isNaN(value)) return '—'
     const v = Math.max(0, Math.min(100, value))
@@ -189,6 +270,9 @@ export function AppLayout() {
           ) {
             setOneapiEnabled(current.modules.oneapi.enabled)
           }
+          if (current.browserAgent && typeof current.browserAgent.enabled === 'boolean') {
+            setBrowserAgentEnabled(current.browserAgent.enabled)
+          }
         }
       } catch {
         // ignore
@@ -212,6 +296,9 @@ export function AppLayout() {
           typeof detail.modules.oneapi.enabled === 'boolean'
         ) {
           setOneapiEnabled(detail.modules.oneapi.enabled)
+        }
+        if (detail.browserAgent && typeof detail.browserAgent.enabled === 'boolean') {
+          setBrowserAgentEnabled(detail.browserAgent.enabled)
         }
       } else {
         loadSettings()
@@ -457,7 +544,7 @@ export function AppLayout() {
                 <div
                   className={cn(
                     'flex items-center gap-1 rounded-full border border-white/60 bg-white/80 p-1 text-xs font-medium text-slate-600 shadow-sm shadow-black/5 backdrop-blur-xl transition-all duration-150 dark:border-white/15 dark:bg-slate-900/70 dark:text-slate-200',
-                    isModuleRoute && moduleTabsExpanded && 'shadow-[0_1px_6px_rgba(15,23,42,0.28)]',
+                    isModuleLikeRoute && moduleTabsExpanded && 'shadow-[0_1px_6px_rgba(15,23,42,0.28)]',
                   )}
                   onMouseEnter={() => {
                     setModuleTabsExpanded(true)
@@ -479,53 +566,35 @@ export function AppLayout() {
                   >
                     <span>首页</span>
                   </NavLink>
-
-                  <NavLink
-                    key="browser-agent"
-                    to="/browser-agent"
-                    className={cn(
-                      'group flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150',
-                      location.pathname.startsWith('/browser-agent')
-                        ? 'bg-white text-slate-900 shadow-[0_1px_4px_rgba(15,23,42,0.22)] ring-1 ring-sky-200/80 dark:bg-slate-100 dark:text-slate-900 dark:ring-sky-300/70'
-                        : 'text-slate-600/80 hover:bg-white/40 hover:text-slate-900 dark:text-slate-300/80 dark:hover:bg-slate-800/70 dark:hover:text-slate-50',
-                    )}
-                  >
-                    <span>AI 浏览器</span>
-                  </NavLink>
-
                   {(() => {
-                    if (isBrowserAgentRoute) {
-                      return null
-                    }
-                    if (!isModuleRoute || !currentModuleId) {
-                      const visible = moduleTabOrder.filter((id) => isModuleVisible(id))
-                      return visible.map((id) => {
-                        const path = `/${id}`
-                        const isActive = location.pathname.startsWith(path)
-                        const status: ServiceStatus = runningModules[id] ? 'running' : 'stopped'
-                        return (
-                          <NavLink
-                            key={id}
-                            to={path}
-                            onClick={() => {
+                    if (!isModuleLikeRoute) {
+                      const visibleModules = moduleTabOrder.filter((id) => isModuleVisible(id))
+                      const items: JSX.Element[] = []
+
+                      if (isBrowserAgentVisible) {
+                        items.push(
+                          renderModuleLikeTab('browser-agent', {
+                            variant: 'nav',
+                          }),
+                        )
+                      }
+
+                      items.push(
+                        ...visibleModules.map((id) =>
+                          renderModuleLikeTab(id, {
+                            variant: 'nav',
+                            onBeforeNavigate: () => {
                               // 从首页点击模块标签时，提前将模块标签栏视为“展开”，避免跳转到模块路由首帧先渲染折叠态造成的闪烁
                               setModuleTabsExpanded(true)
-                            }}
-                            className={cn(
-                              'group flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150',
-                              isActive
-                                ? 'bg-white text-slate-900 shadow-[0_1px_4px_rgba(15,23,42,0.22)] ring-1 ring-sky-200/80 dark:bg-slate-100 dark:text-slate-900 dark:ring-sky-300/70'
-                                : 'text-slate-600/80 hover:bg-white/40 hover:text-slate-900 dark:text-slate-300/80 dark:hover:bg-slate-800/70 dark:hover:text-slate-50',
-                            )}
-                          >
-                            <StatusDot status={status} />
-                            <span>{getModuleLabel(id)}</span>
-                          </NavLink>
-                        )
-                      })
+                            },
+                          }),
+                        ),
+                      )
+
+                      return items
                     }
 
-                    // 模块模式
+                    // 模块 / AI 浏览器 模式
                     const baseVisible = moduleTabOrder.filter((id) => isModuleVisible(id) || id === currentModuleId)
                     const tipModules = moduleTabOrder.filter(
                       (id) =>
@@ -536,92 +605,70 @@ export function AppLayout() {
                     )
 
                     if (!moduleTabsExpanded) {
-                      const collapsedIds: ('n8n' | 'dify' | 'oneapi' | 'ragflow')[] = []
-                      if (currentModuleId) {
+                      const collapsedIds: ModuleLikeId[] = []
+
+                      if (isBrowserAgentRoute && isBrowserAgentVisible) {
+                        collapsedIds.push('browser-agent')
+                      } else if (currentModuleId) {
                         collapsedIds.push(currentModuleId)
                       }
+
                       for (const id of tipModules) {
                         if (!collapsedIds.includes(id)) {
                           collapsedIds.push(id)
                         }
                       }
-                      return collapsedIds.map((id) => {
-                        const path = `/${id}`
-                        const isActive = currentModuleId === id
-                        const status: ServiceStatus = runningModules[id] ? 'running' : 'stopped'
-                        return (
-                          <button
-                            key={id}
-                            type="button"
-                            className={cn(
-                              'group flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150',
-                              isActive
-                                ? 'bg-white text-slate-900 shadow-[0_1px_4px_rgba(15,23,42,0.22)] ring-1 ring-sky-200/80 dark:bg-slate-100 dark:text-slate-900 dark:ring-sky-300/70'
-                                : 'text-slate-600/80 hover:bg-white/40 hover:text-slate-900 dark:text-slate-300/80 dark:hover:bg-slate-800/70 dark:hover:text-slate-50',
-                            )}
-                            onClick={() => {
-                              navigate(path)
-                              try {
-                                window.api.openModuleView(id).catch(() => {})
-                              } catch {
-                              }
-                            }}
-                          >
-                            <StatusDot status={status} />
-                            <span>{getModuleLabel(id)}</span>
-                          </button>
+
+                      return collapsedIds
+                        .filter((id) => isModuleLikeVisible(id))
+                        .map((id) =>
+                          renderModuleLikeTab(id, {
+                            variant: 'button',
+                          }),
                         )
-                      })
                     }
 
                     const orderForExpanded =
                       expandedModuleOrder && expandedModuleOrder.length > 0
-                        ? expandedModuleOrder
-                        : baseVisible
+                        ? (expandedModuleOrder as ModuleLikeId[])
+                        : (baseVisible as ModuleLikeId[])
 
-                    return orderForExpanded.map((id) => {
-                      if (!baseVisible.includes(id)) return null
-                      const path = `/${id}`
-                      const isActive = currentModuleId === id
-                      const status: ServiceStatus = runningModules[id] ? 'running' : 'stopped'
-                      return (
-                        <button
-                          key={id}
-                          type="button"
-                          draggable
-                          onDragStart={() => setDraggingModuleKey(id)}
-                          onDragOver={(e) => {
+                    const items: JSX.Element[] = []
+
+                    if (isBrowserAgentVisible) {
+                      items.push(
+                        renderModuleLikeTab('browser-agent', {
+                          variant: 'button',
+                        }),
+                      )
+                    }
+
+                    const mappedTabs = orderForExpanded
+                      .filter((id) => baseVisible.includes(id as any))
+                      .map((id) =>
+                        renderModuleLikeTab(id, {
+                          variant: 'button',
+                          draggable: true,
+                          onDragStart: () => setDraggingModuleKey(id),
+                          onDragOver: (e) => {
                             e.preventDefault()
                             if (draggingModuleKey) {
                               reorderModuleTabs(draggingModuleKey, id)
                             }
-                          }}
-                          onDrop={(e) => {
+                          },
+                          onDrop: (e) => {
                             e.preventDefault()
                             setDraggingModuleKey(null)
-                          }}
-                          onDragEnd={() => {
+                          },
+                          onDragEnd: () => {
                             setDraggingModuleKey(null)
-                          }}
-                          className={cn(
-                            'group flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150',
-                            isActive
-                              ? 'bg-white text-slate-900 shadow-[0_1px_4px_rgba(15,23,42,0.22)] ring-1 ring-sky-200/80 dark:bg-slate-100 dark:text-slate-900 dark:ring-sky-300/70'
-                              : 'text-slate-600/80 hover:bg-white/40 hover:text-slate-900 dark:text-slate-300/80 dark:hover:bg-slate-800/70 dark:hover:text-slate-50',
-                          )}
-                          onClick={() => {
-                            navigate(path)
-                            try {
-                              window.api.openModuleView(id).catch(() => {})
-                            } catch {
-                            }
-                          }}
-                        >
-                          <StatusDot status={status} />
-                          <span>{getModuleLabel(id)}</span>
-                        </button>
+                          },
+                        }),
                       )
-                    })
+
+                    items.push(...mappedTabs)
+
+                    return items
                   })()}
                 </div>
               </nav>

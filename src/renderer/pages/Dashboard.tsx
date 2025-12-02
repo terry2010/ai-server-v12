@@ -544,11 +544,7 @@ function BrowserAgentCard({ enabled, port, runtime, onOpen }: BrowserAgentCardPr
           </div>
         </div>
 
-        <div className="mt-2 flex items-center justify-between gap-2 text-xs">
-          <div className="text-[10px] text-slate-500 dark:text-slate-400">
-            <div>本页不会重新执行历史操作，只从 NDJSON 与截图文件中还原。</div>
-            <div className="mt-1">如需启用/停用 Browser Agent，请前往「系统设置 - Browser Agent」。</div>
-          </div>
+        <div className="mt-2 flex items-center justify-end gap-2 text-xs">
           <Button
             size="sm"
             shine

@@ -2001,6 +2001,22 @@ export function setupIpcHandlers() {
         const status = rawStatus === 'error' ? 'error' : 'ok'
         const errorCode = typeof rec.errorCode === 'string' ? rec.errorCode || null : null
         const errorMessage = typeof rec.errorMessage === 'string' ? rec.errorMessage || null : null
+        let httpStatus = null
+        if (
+          rec &&
+          rec.network &&
+          typeof rec.network === 'object' &&
+          typeof rec.network.httpStatus === 'number' &&
+          Number.isFinite(rec.network.httpStatus)
+        ) {
+          // 优先展示真实站点的 HTTP 状态码（记录在 network.httpStatus 中）
+          httpStatus = rec.network.httpStatus
+        } else if (typeof rec.httpStatus === 'number' && Number.isFinite(rec.httpStatus)) {
+          // 回退到外层 API 映射后的状态码，如 502/504
+          httpStatus = rec.httpStatus
+        }
+        const network =
+          rec && rec.network && typeof rec.network === 'object' ? rec.network : null
         const snapshotId =
           typeof rec.snapshotId === 'string' && rec.snapshotId.trim()
             ? rec.snapshotId.trim()
@@ -2047,6 +2063,8 @@ export function setupIpcHandlers() {
           errorMessage,
           snapshotId,
           screenshot,
+          httpStatus,
+          network,
         })
       }
 

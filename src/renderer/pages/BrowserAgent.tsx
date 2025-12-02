@@ -94,6 +94,7 @@ function translateStatus(status: 'running' | 'closed' | 'error') {
 function translateActionType(type: string | null | undefined) {
   const t = (type || '').toLowerCase()
   if (t === 'navigate') return '打开页面'
+  if (t === 'navigate.auto') return '页面跳转'
   if (t === 'click') return '点击元素'
   if (t === 'fill') return '输入文本'
   if (t === 'screenshot') return '截图'
@@ -108,6 +109,12 @@ function buildActionSummary(action: BrowserAgentActionTimelineItem) {
     return params && typeof params.url === 'string' && params.url
       ? `打开 URL：${params.url}`
       : '打开页面'
+  }
+
+  if (type === 'navigate.auto') {
+    const url = params && typeof params.url === 'string' ? params.url : ''
+    if (url) return `页面跳转到：${url}`
+    return '页面跳转'
   }
 
   if (type === 'click') {
@@ -673,6 +680,12 @@ export function BrowserAgentPage() {
                                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-300">
                                   用时 {formatDurationMs(action.durationMs)}
                                 </span>
+                                {typeof action.httpStatus === 'number' &&
+                                  Number.isFinite(action.httpStatus) && (
+                                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                                      HTTP {action.httpStatus}
+                                    </span>
+                                  )}
                               </div>
                               {hasScreenshot && (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-300">

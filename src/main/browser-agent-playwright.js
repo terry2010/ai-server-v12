@@ -8,6 +8,7 @@ import {
   getBrowserAgentDataRootDir,
   ensureDirSync,
   appendFileRecord,
+  appendActionRecord,
 } from './browser-agent-storage.js'
 
 /**
@@ -36,6 +37,8 @@ export async function navigateOnce(params) {
     params && typeof params.waitUntil === 'string' ? params.waitUntil : ''
   const rawTimeout =
     params && typeof params.timeoutMs === 'number' ? params.timeoutMs : null
+  const timeoutMs =
+    rawTimeout && Number.isFinite(rawTimeout) && rawTimeout > 0 ? rawTimeout : 30000
 
   if (!sessionId) {
     throw new Error('sessionId is required')
@@ -79,6 +82,106 @@ export async function navigateOnce(params) {
     })
   }
 
+  /**
+   * 记录当前导航主文档的 HTTP 状态码，供后续错误分类使用。
+   *
+   * - 优先通过 session.webRequest.onCompleted 捕获 resourceType=mainFrame 的状态码；
+   * - 同时保留 did-get-response-details 作为补充（旧接口，部分版本可能不触发）。
+   */
+  let mainFrameHttpStatus = null
+  /** @type {((event: Electron.Event, status: boolean, newURL: string, originalURL: string, httpResponseCode: number, requestMethod: string, referrer: string, responseHeaders: any, resourceType: string) => void) | null} */
+  let mainFrameResponseListener = null
+
+  try {
+    const wc = win.webContents
+
+    // 使用 webRequest.onCompleted 按 sessionId 记录主文档 HTTP 状态码
+    try {
+      const electronSession = wc.session
+      // @ts-ignore 在 BrowserWindow 上挂一个 Map: sessionId -> httpStatus
+      if (!win.__browserAgentMainFrameStatusMap) {
+        // @ts-ignore
+        win.__browserAgentMainFrameStatusMap = new Map()
+      }
+      // @ts-ignore
+      const statusMap = win.__browserAgentMainFrameStatusMap
+
+      // 确保 webRequest 监听器只注册一次
+      // @ts-ignore
+      if (!win.__browserAgentWebRequestAttached) {
+        const filter = { urls: ['*://*/*'] }
+        try {
+          electronSession.webRequest.onCompleted(filter, (details) => {
+            try {
+              if (!details || details.resourceType !== 'mainFrame') return
+              const url = typeof details.url === 'string' ? details.url : ''
+              if (!url) return
+
+              const m = /[?&]agent_session=([^&]+)/.exec(url)
+              if (!m || !m[1]) return
+
+              const sid = decodeURIComponent(m[1])
+              const code =
+                typeof details.statusCode === 'number' &&
+                Number.isFinite(details.statusCode)
+                  ? details.statusCode
+                  : null
+              if (!code || code < 100 || code > 999) return
+
+              statusMap.set(sid, code)
+
+              try {
+                const line = `[BrowserAgent] [session=${sid}] event=webRequestMainFrameCompleted url=${url} httpStatus=${code}`
+                console.log(line)
+                appendBrowserAgentTextLog(line)
+              } catch {}
+            } catch {}
+          })
+        } catch {}
+
+        // @ts-ignore
+        win.__browserAgentWebRequestAttached = true
+      }
+
+      // 每次导航前清理当前 sessionId 的旧值
+      statusMap.delete(sessionId)
+    } catch {}
+
+    // 兼容旧版：继续尝试通过 did-get-response-details 捕获 HTTP 状态
+    mainFrameResponseListener = (
+      _event,
+      _status,
+      newURL,
+      _originalURL,
+      httpResponseCode,
+      _requestMethod,
+      _referrer,
+      _responseHeaders,
+      resourceType,
+    ) => {
+      try {
+        if (resourceType === 'mainFrame') {
+          const code =
+            typeof httpResponseCode === 'number' && Number.isFinite(httpResponseCode)
+              ? httpResponseCode
+              : null
+          if (code && code >= 100 && code <= 999) {
+            mainFrameHttpStatus = code
+            try {
+              const line = `[BrowserAgent] [session=${sessionId}] event=mainFrameResponse url=${newURL} httpStatus=${code}`
+              console.log(line)
+              appendBrowserAgentTextLog(line)
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+
+    try {
+      wc.on('did-get-response-details', mainFrameResponseListener)
+    } catch {}
+  } catch {}
+
   // 为该 BrowserWindow 附加 URL 变化日志与下载拦截（只注册一次监听器），并记录当前归属的 sessionId
   try {
     win.__browserAgentSessionId = sessionId
@@ -86,9 +189,10 @@ export async function navigateOnce(params) {
       const logNav = (eventType, url) => {
         try {
           const sid = win.__browserAgentSessionId || sessionId
-          console.log(
-            `[BrowserAgent] [session=${sid}] event=${eventType} url=${url}`,
-          )
+          const line = `[BrowserAgent] [session=${sid}] event=${eventType} url=${url}`
+          console.log(line)
+          appendBrowserAgentTextLog(line)
+          appendNavTimelineAction(sid, url, eventType)
         } catch {}
       }
 
@@ -187,7 +291,7 @@ export async function navigateOnce(params) {
     }
   } catch {}
 
-  await win.loadURL(targetUrl)
+  await loadUrlWithTimeout(win, targetUrl, timeoutMs)
 
   // 简单等待页面加载稳定，后续可根据 timeoutMs / waitUntil 优化
   await delay(3000)
@@ -230,10 +334,45 @@ export async function navigateOnce(params) {
 
     if (!targetPage && candidatePages.length === 1) {
       targetPage = candidatePages[0]
+    } else if (!targetPage && candidatePages.length > 1) {
+      // 当存在多个候选 Page（如 302 跳转到外部站点），优先选择最后一个非应用页面，
+      // 视为本次导航的最终页面，而不是直接报错。
+      targetPage = candidatePages[candidatePages.length - 1]
     }
 
     if (!targetPage) {
-      throw new Error('Playwright 已连接到 Electron，但未找到包含该 session 标记的 Page。')
+      // 如果连候选页面都没有，再按原逻辑视为 Playwright 连接异常。
+      let httpStatusForError = null
+      try {
+        // @ts-ignore
+        const statusMap = win.__browserAgentMainFrameStatusMap
+        if (statusMap && typeof statusMap.get === 'function') {
+          const code = statusMap.get(sessionId)
+          if (typeof code === 'number' && Number.isFinite(code)) {
+            httpStatusForError = code
+          }
+        }
+      } catch {}
+
+      const err = new Error(
+        'Playwright 已连接到 Electron，但未找到包含该 session 标记的 Page。',
+      )
+
+      try {
+        const classified = classifyNetworkError(err, {
+          action: 'navigate',
+          url: targetUrl,
+          httpStatus: httpStatusForError,
+        })
+        if (classified && classified.baCode) {
+          // @ts-ignore
+          err.baCode = classified.baCode
+          // @ts-ignore
+          err.baDetails = classified.baDetails
+        }
+      } catch {}
+
+      throw err
     }
 
     const lowerWait = rawWaitUntil.toLowerCase()
@@ -246,9 +385,6 @@ export async function navigateOnce(params) {
       waitUntil = lowerWait
     }
 
-    const timeoutMs =
-      rawTimeout && Number.isFinite(rawTimeout) && rawTimeout > 0 ? rawTimeout : 30000
-
     if (waitUntil) {
       await targetPage
         .waitForLoadState(waitUntil, { timeout: timeoutMs })
@@ -257,6 +393,7 @@ export async function navigateOnce(params) {
             const classified = classifyNetworkError(error, {
               action: 'navigate',
               url: targetUrl,
+              httpStatus: mainFrameHttpStatus,
             })
             if (classified && classified.baCode) {
               // @ts-ignore
@@ -273,7 +410,9 @@ export async function navigateOnce(params) {
     if (antiBot && antiBot.isAntiBot) {
       const err = new Error(antiBot.message || 'Anti-bot or verification page detected')
       err.name = 'ANTI_BOT_PAGE'
+      // @ts-ignore
       err.baCode = 'ANTI_BOT_PAGE'
+      // @ts-ignore
       err.baDetails = {
         url: antiBot.url || null,
         title: antiBot.title || null,
@@ -286,6 +425,47 @@ export async function navigateOnce(params) {
 
     const title = await targetPage.title().catch(() => '')
     const finalUrl = targetPage.url()
+
+    // 如果主文档 HTTP 状态码为 4xx/5xx，则按网络错误进行分类并抛出，供上层映射为 HTTP_4XX / HTTP_5XX。
+    let httpStatus = null
+
+    try {
+      // @ts-ignore
+      const statusMap = win.__browserAgentMainFrameStatusMap
+      if (statusMap && typeof statusMap.get === 'function') {
+        const code = statusMap.get(sessionId)
+        if (typeof code === 'number' && Number.isFinite(code)) {
+          httpStatus = code
+        }
+      }
+    } catch {}
+
+    if (
+      !httpStatus &&
+      typeof mainFrameHttpStatus === 'number' &&
+      Number.isFinite(mainFrameHttpStatus)
+    ) {
+      httpStatus = mainFrameHttpStatus
+    }
+    if (httpStatus && httpStatus >= 400) {
+      const err = new Error(
+        `HTTP status ${httpStatus} while navigating to ${finalUrl || targetUrl}`,
+      )
+      try {
+        const classified = classifyNetworkError(err, {
+          action: 'navigate',
+          url: finalUrl || targetUrl,
+          httpStatus,
+        })
+        if (classified && classified.baCode) {
+          // @ts-ignore
+          err.baCode = classified.baCode
+          // @ts-ignore
+          err.baDetails = classified.baDetails
+        }
+      } catch {}
+      throw err
+    }
 
     let screenshotPath = ''
     try {
@@ -314,8 +494,21 @@ export async function navigateOnce(params) {
       screenshotPath,
       waitUntil: waitUntil || null,
       timeoutMs,
+      httpStatus,
     }
   } finally {
+    // 清理主文档 HTTP 状态监听器，避免重复注册
+    try {
+      if (win && !win.isDestroyed() && mainFrameResponseListener) {
+        try {
+          win.webContents.removeListener(
+            'did-get-response-details',
+            mainFrameResponseListener,
+          )
+        } catch {}
+      }
+    } catch {}
+
     try {
       await browser.close()
     } catch {
@@ -1665,6 +1858,17 @@ export async function domScrollIntoView(params) {
     }
   } finally {
     try {
+      if (win && !win.isDestroyed() && mainFrameResponseListener) {
+        try {
+          win.webContents.removeListener(
+            'did-get-response-details',
+            mainFrameResponseListener,
+          )
+        } catch {}
+      }
+    } catch {}
+
+    try {
       await browser.close()
     } catch {
     }
@@ -2609,6 +2813,69 @@ function isMainAppUrl(url) {
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function loadUrlWithTimeout(win, url, timeoutMs) {
+  if (!win || !url) {
+    throw new Error('loadUrlWithTimeout: invalid arguments')
+  }
+
+  const loadPromise = win.loadURL(url)
+
+  if (!timeoutMs || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return loadPromise
+  }
+
+  /** @type {NodeJS.Timeout | null} */
+  let timer = null
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error(
+        `Timed out after ${timeoutMs}ms while loading URL: ${url}`,
+      )
+      err.name = 'TimeoutError'
+      reject(err)
+    }, timeoutMs)
+  })
+
+  try {
+    await Promise.race([loadPromise, timeoutPromise])
+  } finally {
+    if (timer) {
+      clearTimeout(timer)
+    }
+  }
+}
+
+let localNavActionSeq = 0
+
+function nextLocalNavigateActionId() {
+  localNavActionSeq += 1
+  return `act_local_${Date.now().toString(36)}_${localNavActionSeq.toString(36)}`
+}
+
+function appendNavTimelineAction(sessionId, url, eventType) {
+  try {
+    if (!sessionId || !url) return
+    const actionId = nextLocalNavigateActionId()
+    const now = new Date().toISOString()
+    appendActionRecord({
+      id: actionId,
+      sessionId,
+      type: 'navigate.auto',
+      params: {
+        url,
+        source: eventType,
+      },
+      startAt: now,
+      endAt: now,
+      status: 'ok',
+      errorCode: null,
+      errorMessage: null,
+      snapshotId: null,
+    })
+  } catch {}
 }
 
 function buildNavigateTargetUrl(rawUrl, sessionId) {

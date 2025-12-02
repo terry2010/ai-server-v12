@@ -1271,6 +1271,28 @@ function handleRequest(req, res) {
               } catch {}
 
               try {
+                let httpStatus = null
+                if (
+                  result &&
+                  typeof result.httpStatus === 'number' &&
+                  Number.isFinite(result.httpStatus)
+                ) {
+                  httpStatus = result.httpStatus
+                }
+
+                let redirectTargetUrl = null
+                try {
+                  const finalUrl =
+                    result && typeof result.pageUrl === 'string' ? result.pageUrl : null
+                  const navigateTarget =
+                    result && typeof result.targetUrl === 'string'
+                      ? result.targetUrl
+                      : null
+                  if (finalUrl && navigateTarget && finalUrl !== navigateTarget) {
+                    redirectTargetUrl = finalUrl
+                  }
+                } catch {}
+
                 appendActionRecord({
                   id: actionId,
                   sessionId,
@@ -1280,6 +1302,7 @@ function handleRequest(req, res) {
                     waitUntil,
                     timeoutMs,
                     onTimeout,
+                    redirectTargetUrl,
                   },
                   startAt: actionStartAt,
                   endAt: new Date().toISOString(),
@@ -1287,6 +1310,7 @@ function handleRequest(req, res) {
                   errorCode: null,
                   errorMessage: null,
                   snapshotId: null,
+                  httpStatus,
                 })
               } catch {}
             }

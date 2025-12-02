@@ -144,6 +144,8 @@ export interface BrowserAgentActionTimelineItem {
         mimeType: string | null
       }
     | null
+  httpStatus?: number | null
+  network?: any | null
 }
 
 export interface BrowserAgentFileItem {

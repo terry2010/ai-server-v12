@@ -22,3 +22,45 @@ body {
 #root {
   min-height: 100vh;
 }
+
+* {
+  scrollbar-width: thin;
+  /* 默认给一个很浅的颜色，避免滚动条完全不可见 */
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+
+.dark * {
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 基础状态：有一条很浅的圆角滚动条，始终可见 */
+::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  margin: 2px 0; /* 让上下端和容器留一点空隙，看起来更像悬浮的小胶囊 */
+}
+
+/* 当鼠标悬停在有滚动条的元素上时颜色加深一档 */
+*:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.7);
+}
+
+.dark *:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.6);
+}
+
+/* 悬停在 thumb 本身时再稍微加深一点，增强反馈 */
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 116, 139, 0.9);
+}

@@ -101,7 +101,10 @@ function translateActionType(type: string | null | undefined) {
   return type || '未知操作'
 }
 
-function buildActionSummary(action: BrowserAgentActionTimelineItem) {
+function buildActionSummary(
+  action: BrowserAgentActionTimelineItem,
+  options?: { redirectExpanded?: boolean; onToggleRedirect?: () => void },
+) {
   const type = (action.type || '').toLowerCase()
   const params: any = action.params || {}
 
@@ -111,36 +114,153 @@ function buildActionSummary(action: BrowserAgentActionTimelineItem) {
         ? `打开 URL：${params.url}`
         : '打开页面'
 
-    const chain = Array.isArray(params && params.redirectChain)
+    const rawChain = Array.isArray(params && params.redirectChain)
       ? params.redirectChain
       : null
 
-    if (chain && chain.length > 0) {
-      try {
-        const parts = chain
-          .map((item: any) => {
-            if (!item || typeof item !== 'object') return ''
-            const url =
-              typeof item.url === 'string' && item.url ? String(item.url) : ''
-            const code =
-              typeof item.statusCode === 'number' &&
-              Number.isFinite(item.statusCode)
-                ? item.statusCode
-                : null
-            if (url && code) return `${url} (${code})`
-            if (url) return url
-            if (code) return String(code)
-            return ''
-          })
-          .filter((s: string) => !!s)
-
-        if (parts.length > 0) {
-          return `${base}；重定向链：${parts.join(' → ')}`
-        }
-      } catch {}
+    if (!rawChain || rawChain.length === 0) {
+      return base
     }
 
-    return base
+    // 规范化重定向链数据，并根据时间戳估算每一步的耗时
+    type ChainRow = {
+      url: string
+      statusCode: number | null
+      timestamp: number | null
+      durationMs: number | null
+    }
+
+    const rows: ChainRow[] = []
+    let prevTs: number | null = null
+
+    for (const item of rawChain as any[]) {
+      if (!item || typeof item !== 'object') continue
+      const url =
+        typeof item.url === 'string' && item.url ? String(item.url) : ''
+      const code =
+        typeof item.statusCode === 'number' && Number.isFinite(item.statusCode)
+          ? item.statusCode
+          : null
+      const tsRaw =
+        typeof item.timestamp === 'string' && item.timestamp
+          ? Date.parse(item.timestamp)
+          : NaN
+      const ts = Number.isNaN(tsRaw) ? null : tsRaw
+
+      let durationMs: number | null = null
+      if (ts != null && prevTs != null && ts >= prevTs) {
+        durationMs = ts - prevTs
+      }
+      if (ts != null) {
+        prevTs = ts
+      }
+
+      if (!url && code == null) continue
+      rows.push({ url, statusCode: code, timestamp: ts, durationMs })
+    }
+
+    if (rows.length === 0) {
+      return base
+    }
+
+    const redirectExpanded = options && options.redirectExpanded
+    const onToggleRedirect = options && options.onToggleRedirect
+
+    const visibleRows: ChainRow[] = []
+    const total = rows.length
+    const shouldCollapse = total > 3 && !redirectExpanded
+
+    if (shouldCollapse) {
+      // 仅展示第一步和最后一步，中间用一行“展开剩余 N 条重定向”表示
+      visibleRows.push(rows[0])
+    } else {
+      visibleRows.push(...rows)
+    }
+
+    return (
+      <div className="space-y-1">
+        <div>{base}</div>
+        <div className="mt-1 overflow-x-auto rounded-md bg-slate-50 px-2 py-1 text-[10px] text-slate-600 dark:bg-slate-900/40 dark:text-slate-300">
+          <table className="min-w-full border-separate border-spacing-y-0.5">
+            <thead>
+              <tr className="text-left text-[10px] text-slate-400 dark:text-slate-500">
+                <th className="w-[52px] pr-2 font-normal">HTTP</th>
+                <th className="w-[80px] pr-2 font-normal">耗时</th>
+                <th className="font-normal">URL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shouldCollapse && (
+                <tr key="__first__">
+                  <td className="align-top pr-2 text-slate-700 dark:text-slate-200">
+                    {rows[0].statusCode != null ? rows[0].statusCode : '—'}
+                  </td>
+                  <td className="align-top pr-2 text-slate-500 dark:text-slate-400">
+                    {rows[0].durationMs != null
+                      ? formatDurationMs(rows[0].durationMs)
+                      : '—'}
+                  </td>
+                  <td className="align-top break-all text-slate-700 dark:text-slate-200">
+                    {rows[0].url || '—'}
+                  </td>
+                </tr>
+              )}
+
+              {shouldCollapse && total > 2 && (
+                <tr key="__collapse__">
+                  <td colSpan={3} className="cursor-pointer select-none py-0.5 text-center text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200" onClick={onToggleRedirect}>
+                    共 {total} 条重定向，点击展开中间 {total - 2} 条
+                  </td>
+                </tr>
+              )}
+
+              {shouldCollapse ? (
+                total > 1 && (
+                  <tr key="__last__">
+                    <td className="align-top pr-2 text-slate-700 dark:text-slate-200">
+                      {rows[total - 1].statusCode != null
+                        ? rows[total - 1].statusCode
+                        : '—'}
+                    </td>
+                    <td className="align-top pr-2 text-slate-500 dark:text-slate-400">
+                      {rows[total - 1].durationMs != null
+                        ? formatDurationMs(rows[total - 1].durationMs)
+                        : '—'}
+                    </td>
+                    <td className="align-top break-all text-slate-700 dark:text-slate-200">
+                      {rows[total - 1].url || '—'}
+                    </td>
+                  </tr>
+                )
+              ) : (
+                rows.map((row, idx) => (
+                  <tr key={idx}>
+                    <td className="align-top pr-2 text-slate-700 dark:text-slate-200">
+                      {row.statusCode != null ? row.statusCode : '—'}
+                    </td>
+                    <td className="align-top pr-2 text-slate-500 dark:text-slate-400">
+                      {row.durationMs != null
+                        ? formatDurationMs(row.durationMs)
+                        : idx === 0
+                        ? '—'
+                        : '—'}
+                    </td>
+                    <td className="align-top break-all text-slate-700 dark:text-slate-200">
+                      {row.url || '—'}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {shouldCollapse && onToggleRedirect && (
+          <div className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
+            提示：点击中间行可展开完整重定向链。
+          </div>
+        )}
+      </div>
+    )
   }
 
   if (type === 'navigate.auto') {
@@ -210,6 +330,11 @@ export function BrowserAgentPage() {
 
   const [showingWindow, setShowingWindow] = useState(false)
   const [openingSnapshotId, setOpeningSnapshotId] = useState<string | null>(null)
+
+  // 记录每条 navigate 动作的重定向链是否展开
+  const [expandedRedirectActions, setExpandedRedirectActions] = useState<
+    Record<string, boolean>
+  >({})
 
   const [reloadFlag, setReloadFlag] = useState(0)
   const dateInputRef = useRef<HTMLInputElement | null>(null)
@@ -692,6 +817,13 @@ export function BrowserAgentPage() {
                     {detail.actions.map((action) => {
                       const hasScreenshot = !!action.screenshot
                       const isOpening = openingSnapshotId === action.snapshotId
+                      const redirectExpanded = !!expandedRedirectActions[action.id]
+                      const handleToggleRedirect = () => {
+                        setExpandedRedirectActions((prev) => ({
+                          ...prev,
+                          [action.id]: !prev[action.id],
+                        }))
+                      }
                       return (
                         <div
                           key={action.id}
@@ -727,7 +859,10 @@ export function BrowserAgentPage() {
                               )}
                             </div>
                             <div className="text-[11px] text-slate-700 dark:text-slate-200">
-                              {buildActionSummary(action)}
+                              {buildActionSummary(action, {
+                                redirectExpanded,
+                                onToggleRedirect: handleToggleRedirect,
+                              })}
                             </div>
                             <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400">
                               {action.errorMessage && (

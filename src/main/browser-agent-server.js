@@ -1281,6 +1281,7 @@ function handleRequest(req, res) {
                 }
 
                 let redirectTargetUrl = null
+                let redirectChain = null
                 try {
                   const finalUrl =
                     result && typeof result.pageUrl === 'string' ? result.pageUrl : null
@@ -1290,6 +1291,10 @@ function handleRequest(req, res) {
                       : null
                   if (finalUrl && navigateTarget && finalUrl !== navigateTarget) {
                     redirectTargetUrl = finalUrl
+                  }
+
+                  if (result && Array.isArray(result.redirectChain)) {
+                    redirectChain = result.redirectChain
                   }
                 } catch {}
 
@@ -1303,6 +1308,7 @@ function handleRequest(req, res) {
                     timeoutMs,
                     onTimeout,
                     redirectTargetUrl,
+                    redirectChain,
                   },
                   startAt: actionStartAt,
                   endAt: new Date().toISOString(),

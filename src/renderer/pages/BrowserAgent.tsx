@@ -106,9 +106,41 @@ function buildActionSummary(action: BrowserAgentActionTimelineItem) {
   const params: any = action.params || {}
 
   if (type === 'navigate') {
-    return params && typeof params.url === 'string' && params.url
-      ? `打开 URL：${params.url}`
-      : '打开页面'
+    const base =
+      params && typeof params.url === 'string' && params.url
+        ? `打开 URL：${params.url}`
+        : '打开页面'
+
+    const chain = Array.isArray(params && params.redirectChain)
+      ? params.redirectChain
+      : null
+
+    if (chain && chain.length > 0) {
+      try {
+        const parts = chain
+          .map((item: any) => {
+            if (!item || typeof item !== 'object') return ''
+            const url =
+              typeof item.url === 'string' && item.url ? String(item.url) : ''
+            const code =
+              typeof item.statusCode === 'number' &&
+              Number.isFinite(item.statusCode)
+                ? item.statusCode
+                : null
+            if (url && code) return `${url} (${code})`
+            if (url) return url
+            if (code) return String(code)
+            return ''
+          })
+          .filter((s: string) => !!s)
+
+        if (parts.length > 0) {
+          return `${base}；重定向链：${parts.join(' → ')}`
+        }
+      } catch {}
+    }
+
+    return base
   }
 
   if (type === 'navigate.auto') {

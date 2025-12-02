@@ -103,14 +103,72 @@ export async function navigateOnce(params) {
         // @ts-ignore
         win.__browserAgentMainFrameStatusMap = new Map()
       }
+      // @ts-ignore 记录每个 session 的主文档重定向链路数组
+      if (!win.__browserAgentRedirectChainMap) {
+        // @ts-ignore
+        win.__browserAgentRedirectChainMap = new Map()
+      }
       // @ts-ignore
       const statusMap = win.__browserAgentMainFrameStatusMap
+      // @ts-ignore
+      const redirectMap = win.__browserAgentRedirectChainMap
 
       // 确保 webRequest 监听器只注册一次
       // @ts-ignore
       if (!win.__browserAgentWebRequestAttached) {
         const filter = { urls: ['*://*/*'] }
         try {
+          // 记录每一次 3xx 主文档重定向
+          electronSession.webRequest.onBeforeRedirect(filter, (details) => {
+            try {
+              if (!details || details.resourceType !== 'mainFrame') return
+              const url = typeof details.url === 'string' ? details.url : ''
+              if (!url) return
+
+              const m = /[?&]agent_session=([^&]+)/.exec(url)
+              if (!m || !m[1]) return
+
+              const sid = decodeURIComponent(m[1])
+              const code =
+                typeof details.statusCode === 'number' &&
+                Number.isFinite(details.statusCode)
+                  ? details.statusCode
+                  : null
+              if (!code || code < 100 || code > 999) return
+
+              try {
+                let chain = redirectMap.get(sid)
+                if (!Array.isArray(chain)) {
+                  chain = []
+                  redirectMap.set(sid, chain)
+                }
+                chain.push({
+                  url,
+                  statusCode: code,
+                  fromCache: !!details.fromCache,
+                  isRedirect: true,
+                  redirectUrl:
+                    typeof details.redirectURL === 'string'
+                      ? details.redirectURL
+                      : '',
+                  timestamp: new Date().toISOString(),
+                })
+              } catch {}
+
+              try {
+                const line = `[BrowserAgent] [session=${sid}] event=webRequestMainFrameRedirect url=${url} httpStatus=${code} redirectUrl=${
+                  // @ts-ignore
+                  details.redirectURL || ''
+                }`
+                console.log(line)
+                appendBrowserAgentTextLog(line)
+              } catch {}
+            } catch {}
+          })
+        } catch {}
+
+        try {
+          // 记录最终主文档响应（通常是 2xx/4xx/5xx）
           electronSession.webRequest.onCompleted(filter, (details) => {
             try {
               if (!details || details.resourceType !== 'mainFrame') return
@@ -131,6 +189,22 @@ export async function navigateOnce(params) {
               statusMap.set(sid, code)
 
               try {
+                let chain = redirectMap.get(sid)
+                if (!Array.isArray(chain)) {
+                  chain = []
+                  redirectMap.set(sid, chain)
+                }
+                chain.push({
+                  url,
+                  statusCode: code,
+                  fromCache: !!details.fromCache,
+                  isRedirect: false,
+                  redirectUrl: '',
+                  timestamp: new Date().toISOString(),
+                })
+              } catch {}
+
+              try {
                 const line = `[BrowserAgent] [session=${sid}] event=webRequestMainFrameCompleted url=${url} httpStatus=${code}`
                 console.log(line)
                 appendBrowserAgentTextLog(line)
@@ -145,6 +219,7 @@ export async function navigateOnce(params) {
 
       // 每次导航前清理当前 sessionId 的旧值
       statusMap.delete(sessionId)
+      redirectMap.delete(sessionId)
     } catch {}
 
     // 兼容旧版：继续尝试通过 did-get-response-details 捕获 HTTP 状态
@@ -293,9 +368,6 @@ export async function navigateOnce(params) {
 
   await loadUrlWithTimeout(win, targetUrl, timeoutMs)
 
-  // 简单等待页面加载稳定，后续可根据 timeoutMs / waitUntil 优化
-  await delay(3000)
-
   let chromium
   try {
     ;({ chromium } = await import('playwright-core'))
@@ -428,14 +500,23 @@ export async function navigateOnce(params) {
 
     // 如果主文档 HTTP 状态码为 4xx/5xx，则按网络错误进行分类并抛出，供上层映射为 HTTP_4XX / HTTP_5XX。
     let httpStatus = null
+    let redirectChain = null
 
     try {
       // @ts-ignore
       const statusMap = win.__browserAgentMainFrameStatusMap
+      // @ts-ignore
+      const redirectMap = win.__browserAgentRedirectChainMap
       if (statusMap && typeof statusMap.get === 'function') {
         const code = statusMap.get(sessionId)
         if (typeof code === 'number' && Number.isFinite(code)) {
           httpStatus = code
+        }
+      }
+      if (redirectMap && typeof redirectMap.get === 'function') {
+        const chain = redirectMap.get(sessionId)
+        if (Array.isArray(chain) && chain.length > 0) {
+          redirectChain = chain
         }
       }
     } catch {}
@@ -495,6 +576,7 @@ export async function navigateOnce(params) {
       waitUntil: waitUntil || null,
       timeoutMs,
       httpStatus,
+      redirectChain,
     }
   } finally {
     // 清理主文档 HTTP 状态监听器，避免重复注册

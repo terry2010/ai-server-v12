@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { StatusDot } from '@/components/StatusDot'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import type { LogItem, LogLevel } from '../Logs'
+import { useTranslation } from 'react-i18next'
 
 interface LogsFilterBarProps {
   moduleFilter: 'all' | LogItem['module']
@@ -33,13 +34,15 @@ export function LogsFilterBar({
   onExport,
   onClear,
 }: LogsFilterBarProps) {
+  const { t } = useTranslation('logs')
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
       <div className="flex items-center gap-2">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">系统日志</h2>
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h2>
         <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700 dark:bg-slate-900/70 dark:text-slate-300">
           <StatusDot status={isAutoRefresh ? 'running' : 'stopped'} />
-          <span>{isAutoRefresh ? '实时' : '已暂停'}</span>
+          <span>{isAutoRefresh ? t('realtime') : t('paused')}</span>
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -53,7 +56,7 @@ export function LogsFilterBar({
           >
             <SelectTrigger className="h-8 w-28">
               {moduleFilter === 'all'
-                ? '选择模块'
+                ? t('filters.module')
                 : moduleFilter === 'client'
                 ? 'client'
                 : moduleFilter === 'n8n'
@@ -65,7 +68,7 @@ export function LogsFilterBar({
                 : 'RagFlow'}
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部</SelectItem>
+              <SelectItem value="all">{t('filters.all')}</SelectItem>
               <SelectItem value="client">client</SelectItem>
               <SelectItem value="n8n">n8n</SelectItem>
               <SelectItem value="dify">Dify</SelectItem>
@@ -80,10 +83,10 @@ export function LogsFilterBar({
             }}
           >
             <SelectTrigger className="h-8 w-28">
-              {levelFilter === 'all' ? '选择日志级别' : levelFilter}
+              {levelFilter === 'all' ? t('filters.level') : levelFilter}
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部</SelectItem>
+              <SelectItem value="all">{t('filters.all')}</SelectItem>
               <SelectItem value="error">error</SelectItem>
               <SelectItem value="warn">warn</SelectItem>
               <SelectItem value="info">info</SelectItem>
@@ -92,7 +95,7 @@ export function LogsFilterBar({
           </Select>
         </div>
         <div className="flex items-center gap-1 rounded-xl bg-white/90 px-2 py-1 text-slate-700 shadow-sm dark:bg-slate-900/70 dark:text-slate-100">
-          <span className="text-[10px] text-slate-500 dark:text-slate-400">时间范围</span>
+          <span className="text-[10px] text-slate-500 dark:text-slate-400">{t('filters.timeRange')}</span>
           <Select
             value={timeRange}
             onValueChange={(v) => {
@@ -101,21 +104,21 @@ export function LogsFilterBar({
           >
             <SelectTrigger className="h-8 w-40 text-[10px]">
               {timeRange === 'all'
-                ? '全部'
+                ? t('filters.all')
                 : timeRange === '5m'
-                ? '最近 5 分钟'
+                ? t('filters.last5m')
                 : timeRange === '30m'
-                ? '最近 30 分钟'
+                ? t('filters.last30m')
                 : timeRange === '1h'
-                ? '最近 1 小时'
-                : '最近 24 小时'}
+                ? t('filters.last1h')
+                : t('filters.last24h')}
             </SelectTrigger>
             <SelectContent className="min-w-[160px]">
-              <SelectItem value="all">全部</SelectItem>
-              <SelectItem value="5m">最近 5 分钟</SelectItem>
-              <SelectItem value="30m">最近 30 分钟</SelectItem>
-              <SelectItem value="1h">最近 1 小时</SelectItem>
-              <SelectItem value="24h">最近 24 小时</SelectItem>
+              <SelectItem value="all">{t('filters.all')}</SelectItem>
+              <SelectItem value="5m">{t('filters.last5m')}</SelectItem>
+              <SelectItem value="30m">{t('filters.last30m')}</SelectItem>
+              <SelectItem value="1h">{t('filters.last1h')}</SelectItem>
+              <SelectItem value="24h">{t('filters.last24h')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -128,7 +131,7 @@ export function LogsFilterBar({
           disabled={loading}
         >
           <RefreshCcw className={`mr-1 h-3 w-3 ${isAutoRefresh && !loading ? 'animate-spin' : ''}`} />
-          {isAutoRefresh ? '停止刷新' : '开始刷新'}
+          {isAutoRefresh ? t('actions.stop') : t('actions.start')}
         </Button>
         <Button
           size="sm"
@@ -138,10 +141,10 @@ export function LogsFilterBar({
           onClick={onExport}
           disabled={exporting}
         >
-          <Download className="mr-1 h-3 w-3" /> {exporting ? '导出中…' : '导出日志'}
+          <Download className="mr-1 h-3 w-3" /> {exporting ? t('actions.exporting') : t('actions.export')}
         </Button>
         <Button size="sm" variant="destructive" shine className="text-[11px]" onClick={onClear}>
-          <Trash2 className="mr-1 h-3 w-3" /> 清空
+          <Trash2 className="mr-1 h-3 w-3" /> {t('actions.clear')}
         </Button>
       </div>
     </div>

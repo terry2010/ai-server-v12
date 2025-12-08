@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Field } from './Field'
+import { useTranslation } from 'react-i18next'
 
 interface BrowserAgentSettingsProps {
   settings: AppSettings | null
@@ -13,12 +14,14 @@ interface BrowserAgentSettingsProps {
 }
 
 export function BrowserAgentSettings({ settings, loading, saving, onChange, onSave }: BrowserAgentSettingsProps) {
+  const { t } = useTranslation('settings')
+
   if (loading || !settings) {
     return (
       <Card className="border-none bg-transparent shadow-none">
         <CardHeader className="px-0">
-          <CardTitle>Agent 设置</CardTitle>
-          <CardDescription>正在加载配置…</CardDescription>
+          <CardTitle>{t('agent.loadingTitle')}</CardTitle>
+          <CardDescription>{t('agent.loadingDesc')}</CardDescription>
         </CardHeader>
       </Card>
     )
@@ -71,27 +74,25 @@ export function BrowserAgentSettings({ settings, loading, saving, onChange, onSa
   return (
     <Card className="border-none bg-transparent shadow-none">
       <CardHeader className="px-0">
-        <CardTitle>AI浏览器设置</CardTitle>
-        <CardDescription>
-          配置用于 n8n 等调用的本地 Browser Agent HTTP 服务。当前仅监听 127.0.0.1，建议为生产环境设置强随机 token。
-        </CardDescription>
+        <CardTitle>{t('agent.cardTitle')}</CardTitle>
+        <CardDescription>{t('agent.cardDesc')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-0">
         <form className="space-y-4" onSubmit={handleSubmit}>
-          <Field label="启用 Browser Agent" description="开启后，在 127.0.0.1 上启动本地 Browser Agent HTTP 服务。">
+          <Field label={t('agent.enable.label')} description={t('agent.enable.desc')}>
             <Switch checked={browserAgent.enabled} onCheckedChange={handleEnabledChange} />
           </Field>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="服务端口" description="Browser Agent HTTP 服务监听的本地端口，仅支持 1024-65535 范围。">
+            <Field label={t('agent.port.label')} description={t('agent.port.desc')}>
               <Input
-                placeholder="26080"
+                placeholder={t('agent.port.placeholder')}
                 className="font-mono text-xs"
                 value={browserAgent.port ? String(browserAgent.port) : ''}
                 onChange={(e) => handlePortChange(e.target.value)}
               />
             </Field>
-            <Field label="示例调用地址" description="用于在 n8n HTTP 节点等处参考配置 Browser Agent 地址。">
+            <Field label={t('agent.example.label')} description={t('agent.example.desc')}>
               <div className="break-all font-mono text-xs text-slate-700 dark:text-slate-200">
                 {baseUrl}/health
               </div>
@@ -99,11 +100,11 @@ export function BrowserAgentSettings({ settings, loading, saving, onChange, onSa
           </div>
 
           <Field
-            label="访问 Token"
-            description="可选。设置后，所有 HTTP 请求需要在 Header 中携带 X-Browser-Agent-Token 或 Authorization: Bearer &lt;token&gt;。留空则不校验。"
+            label={t('agent.token.label')}
+            description={t('agent.token.desc')}
           >
             <Input
-              placeholder="建议设置为一段足够随机的字符串，例如 32-64 位令牌。"
+              placeholder={t('agent.token.placeholder')}
               className="font-mono text-xs"
               value={browserAgent.token || ''}
               onChange={(e) => handleTokenChange(e.target.value)}
@@ -111,11 +112,11 @@ export function BrowserAgentSettings({ settings, loading, saving, onChange, onSa
           </Field>
 
           <Field
-            label="数据/日志目录（可选）"
-            description="用于存放 Browser Agent 的文本日志、NDJSON 元数据以及截图/下载文件等。留空则使用应用默认 data 目录。"
+            label={t('agent.dataRoot.label')}
+            description={t('agent.dataRoot.desc')}
           >
             <Input
-              placeholder="例如：C:\\ai-server-data\\browser-agent"
+              placeholder={t('agent.dataRoot.placeholder')}
               className="font-mono text-xs"
               value={browserAgent.dataRoot || ''}
               onChange={(e) => handleDataRootChange(e.target.value)}
@@ -124,14 +125,14 @@ export function BrowserAgentSettings({ settings, loading, saving, onChange, onSa
 
           <div className="flex items-center justify-between pt-2 text-[11px] text-slate-500 dark:text-slate-400">
             <div>
-              端口修改后，当前版本建议重启应用以确保 Browser Agent 按新端口监听。
+              {t('agent.footerTip')}
             </div>
             <button
               type="submit"
               className="inline-flex items-center gap-1 rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-sky-600 disabled:opacity-60"
               disabled={saving}
             >
-              {saving ? '保存中…' : '保存 Agent 设置'}
+              {saving ? t('agent.saveButton.saving') : t('agent.saveButton.idle')}
             </button>
           </div>
         </form>

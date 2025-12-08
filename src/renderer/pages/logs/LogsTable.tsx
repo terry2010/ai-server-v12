@@ -1,6 +1,7 @@
 import { GlassCard } from '@/components/GlassCard'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { LogItem, LogLevel } from '../Logs'
+import { useTranslation } from 'react-i18next'
 
 const levelColors: Record<LogLevel, string> = {
   error: 'bg-red-500 text-white',
@@ -15,16 +16,18 @@ interface LogsTableProps {
 }
 
 export function LogsTable({ items, total }: LogsTableProps) {
+  const { t } = useTranslation('logs')
+
   return (
     <GlassCard className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-0 text-slate-800 dark:border-white/20 dark:bg-slate-950/80">
       <div className="font-mono text-[11px] text-slate-800 dark:text-slate-100">
         <Table className="min-w-full">
           <TableHeader className="sticky top-0 z-10 border-b border-slate-200 bg-slate-100/95 backdrop-blur-sm dark:border-slate-800/80 dark:bg-slate-900/95">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[110px]">时间</TableHead>
-              <TableHead className="w-[70px]">级别</TableHead>
-              <TableHead className="w-[170px] whitespace-nowrap">模块 / 服务</TableHead>
-              <TableHead>消息</TableHead>
+              <TableHead className="w-[110px]">{t('table.time')}</TableHead>
+              <TableHead className="w-[70px]">{t('table.level')}</TableHead>
+              <TableHead className="w-[170px] whitespace-nowrap">{`${t('table.module')} / ${t('table.service')}`}</TableHead>
+              <TableHead>{t('table.message')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -60,7 +63,7 @@ export function LogsTable({ items, total }: LogsTableProps) {
             {total === 0 && (
               <TableRow>
                 <TableCell colSpan={4} className="py-6 text-center text-slate-500">
-                  当前筛选条件下暂无日志。
+                  {t('table.empty')}
                 </TableCell>
               </TableRow>
             )}

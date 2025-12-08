@@ -1,0 +1,42 @@
+{
+  "header": {
+    "title": "Performance monitoring",
+    "badgeRunning": "Live",
+    "badgePaused": "Paused"
+  },
+  "actions": {
+    "refresh": "Refresh",
+    "startAuto": "Start auto refresh",
+    "stopAuto": "Stop auto refresh"
+  },
+  "systemCard": {
+    "title": "System resource usage",
+    "desc": "Current CPU / memory / disk utilization.",
+    "empty": "System metrics are temporarily unavailable.",
+    "metrics": {
+      "cpu": "CPU",
+      "memory": "Memory",
+      "disk": "Disk"
+    }
+  },
+  "modulesCard": {
+    "title": "Service status",
+    "desc": "Runtime status and resource usage of core services.",
+    "empty": "Module metrics are temporarily unavailable.",
+    "rowStatus": "CPU {{cpu}}% · Memory {{memory}}%"
+  },
+  "charts": {
+    "cpuTitle": "CPU trend",
+    "cpuDesc": "Demo chart only for now. Historical data can be wired later.",
+    "memoryTitle": "Memory trend",
+    "memoryDesc": "Demo chart only for now. Historical data can be wired later.",
+    "axisNow": "Now",
+    "axis15m": "+15min",
+    "axis30m": "+30min",
+    "axis45m": "+45min",
+    "axis60m": "+60min"
+  },
+  "service": {
+    "latencyNotRunning": "Not running"
+  }
+}

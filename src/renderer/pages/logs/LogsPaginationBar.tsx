@@ -8,6 +8,7 @@ import {
   PaginationPrevious,
 } from '@/components/ui/pagination'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
+import { useTranslation } from 'react-i18next'
 
 interface LogsPaginationBarProps {
   page: number
@@ -26,14 +27,14 @@ export function LogsPaginationBar({
   onPageChange,
   onPageSizeChange,
 }: LogsPaginationBarProps) {
+  const { t } = useTranslation('logs')
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-      <span>
-        共 {total} 条 · 每页 {pageSize} 条 · 第 {page} / {totalPages} 页
-      </span>
+      <span>{t('pagination.summary', { total, pageSize, page, totalPages })}</span>
       <div className="flex items-center gap-3">
         <div className="hidden items-center gap-1 text-[10px] text-slate-500 sm:flex dark:text-slate-400 whitespace-nowrap">
-          <span className="whitespace-nowrap">每页</span>
+          <span className="whitespace-nowrap">{t('pagination.perPage')}</span>
           <Select
             value={String(pageSize)}
             onValueChange={(v) => {
@@ -53,7 +54,7 @@ export function LogsPaginationBar({
               <SelectItem value="100">100</SelectItem>
             </SelectContent>
           </Select>
-          <span>条</span>
+          <span>{t('pagination.items')}</span>
         </div>
         <Pagination className="w-auto">
           <PaginationContent>

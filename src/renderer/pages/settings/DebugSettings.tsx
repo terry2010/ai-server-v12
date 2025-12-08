@@ -5,6 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Field } from './Field'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 interface DebugSettingsProps {
   settings: AppSettings | null
@@ -12,16 +14,18 @@ interface DebugSettingsProps {
   saving: boolean
   onChange: (next: AppSettings) => void
   onSave: () => void
-  onDangerClick: (action: string) => void
+  onDangerClick: (action: 'stopAll' | 'removeAll' | 'pruneVolumes' | 'fullCleanup') => void
 }
 
 export function DebugSettings({ settings, loading, saving, onChange, onSave, onDangerClick }: DebugSettingsProps) {
+  const { t } = useTranslation('settings')
+
   if (loading || !settings) {
     return (
       <Card className="border-none bg-transparent shadow-none">
         <CardHeader className="px-0">
-          <CardTitle>调试设置</CardTitle>
-          <CardDescription>正在加载配置…</CardDescription>
+          <CardTitle>{t('tabs.debug')}</CardTitle>
+          <CardDescription>...</CardDescription>
         </CardHeader>
       </Card>
     )
@@ -70,32 +74,56 @@ export function DebugSettings({ settings, loading, saving, onChange, onSave, onD
     })
   }
 
+  const handleClearLocalStorage = () => {
+    const confirmed = window.confirm(t('debug.clearStorageConfirm'))
+    if (!confirmed) return
+
+    try {
+      window.localStorage.clear()
+      toast.success(t('debug.clearStorageSuccess'))
+      window.setTimeout(() => {
+        window.location.reload()
+      }, 500)
+    } catch {
+      toast.error(t('debug.clearStorageFail'))
+    }
+  }
+
   return (
     <Card className="border-none bg-transparent shadow-none">
       <CardHeader className="px-0">
-        <CardTitle>调试设置</CardTitle>
-        <CardDescription>用于问题排查和开发调试的高级选项。</CardDescription>
+        <CardTitle>{t('tabs.debug')}</CardTitle>
+        <CardDescription>{t('debugPage.cardDesc')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-0">
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="显示调试工具" description="在界面中展示额外的调试入口。">
+          <Field
+            label={t('debugPage.showTools.label')}
+            description={t('debugPage.showTools.desc')}
+          >
             <Switch checked={settings.debug.showDebugTools} onCheckedChange={handleShowDebugToolsChange} />
           </Field>
-          <Field label="输出详细日志" description="开启后将输出更多 debug 日志。">
+          <Field
+            label={t('debugPage.verboseLogging.label')}
+            description={t('debugPage.verboseLogging.desc')}
+          >
             <Switch
               checked={settings.debug.verboseLogging}
               onCheckedChange={handleVerboseLoggingChange}
             />
           </Field>
-          <Field label="展示系统名称设置项" description="关闭后，将在系统设置中隐藏“系统名称”配置。">
+          <Field
+            label={t('debugPage.showSystemName.label')}
+            description={t('debugPage.showSystemName.desc')}
+          >
             <Switch
               checked={settings.debug.showSystemNameSetting}
               onCheckedChange={handleShowSystemNameSettingChange}
             />
           </Field>
           <Field
-            label="模块 BrowserView 空闲销毁时间（分钟）"
-            description="模块 BrowserView 在后台空闲超过该时间后将被销毁以释放内存。"
+            label={t('debugPage.browserViewIdleMinutes.label')}
+            description={t('debugPage.browserViewIdleMinutes.desc')}
           >
             <Input
               type="number"
@@ -111,10 +139,10 @@ export function DebugSettings({ settings, loading, saving, onChange, onSave, onD
         <div className="mt-2 space-y-2 rounded-xl border border-red-400/40 bg-red-50/80 px-3 py-3 text-xs text-red-900 dark:border-red-500/50 dark:bg-red-950/40 dark:text-red-100">
           <div className="mb-1 flex items-center gap-2 text-xs font-semibold">
             <AlertTriangle className="h-3.5 w-3.5 text-red-500 dark:text-red-300" />
-            危险操作
+            {t('dangerDialog.title')}
           </div>
           <p className="text-[11px] text-red-800/90 dark:text-red-100/80">
-            以下操作会直接对容器和数据卷产生影响，请在确认已经备份数据后再执行。
+            {t('dangerDialog.description', { action: '' })}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <Button
@@ -122,46 +150,58 @@ export function DebugSettings({ settings, loading, saving, onChange, onSave, onD
               shine
               size="sm"
               className="text-[11px]"
-              onClick={() => onDangerClick('停止所有容器')}
+              onClick={() => onDangerClick('stopAll')}
             >
-              停止所有容器
+              {t('debugActions.stopAll')}
             </Button>
             <Button
               variant="destructive"
               shine
               size="sm"
               className="text-[11px]"
-              onClick={() => onDangerClick('删除所有容器')}
+              onClick={() => onDangerClick('removeAll')}
             >
-              删除所有容器
+              {t('debugActions.removeAll')}
             </Button>
             <Button
               variant="destructive"
               shine
               size="sm"
               className="text-[11px]"
-              onClick={() => onDangerClick('清空所有数据卷')}
+              onClick={() => onDangerClick('pruneVolumes')}
             >
-              清空所有数据卷
+              {t('debugActions.pruneVolumes')}
             </Button>
             <Button
               variant="destructive"
               shine
               size="sm"
               className="text-[11px]"
-              onClick={() => onDangerClick('一键清理')}
+              onClick={() => onDangerClick('fullCleanup')}
             >
-              一键清理
+              {t('debugActions.fullCleanup')}
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-2 space-y-2 rounded-xl border border-slate-200/70 bg-slate-50/80 px-3 py-3 text-xs text-slate-700 dark:border-slate-700/50 dark:bg-slate-900/40 dark:text-slate-100">
+          <div className="mb-1 text-xs font-semibold">{t('debug.clearStorageTitle')}</div>
+          <p className="text-[11px] text-slate-600 dark:text-slate-300">
+            {t('debug.clearStorageDesc')}
+          </p>
+          <div className="mt-2">
+            <Button size="sm" variant="outline" className="text-[11px]" onClick={handleClearLocalStorage}>
+              {t('debug.clearStorageButton')}
             </Button>
           </div>
         </div>
 
         <div className="flex gap-2 pt-2">
           <Button shine disabled={loading || saving} onClick={onSave}>
-            保存调试设置
+            {t('system.save')}
           </Button>
           <Button variant="outline" disabled>
-            重置为默认
+            {t('system.reset')}
           </Button>
         </div>
       </CardContent>

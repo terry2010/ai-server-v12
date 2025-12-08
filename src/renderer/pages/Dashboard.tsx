@@ -14,6 +14,7 @@ import { ServiceCard } from './dashboard/ServiceCard'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Cpu, MemoryStick, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useTranslation } from 'react-i18next'
 
 export type ServiceKey = ModuleId
 
@@ -35,12 +36,9 @@ export interface ServiceModule {
 
 const formatUptime = (
   uptimeSeconds: number | null | undefined,
-  status: ServiceStatus,
+  _status: ServiceStatus,
 ): string => {
   if (uptimeSeconds == null || uptimeSeconds < 0 || Number.isNaN(uptimeSeconds)) {
-    if (status === 'running') return '已启动'
-    if (status === 'starting') return '启动中…'
-    if (status === 'stopping') return '停止中…'
     return '—'
   }
 
@@ -91,6 +89,7 @@ const mapModuleToService = (
 }
 
 export function DashboardPage() {
+  const { t } = useTranslation('dashboard')
   const [services, setServices] = useState<ServiceModule[]>([])
   const [dockerStatus, setDockerStatus] = useState<DockerStatus | null>(null)
   const [isStartingDocker, setIsStartingDocker] = useState(false)
@@ -238,7 +237,7 @@ export function DashboardPage() {
             ? {
                 ...s,
                 status: 'stopping',
-                metrics: { ...s.metrics, uptime: '停止中…' },
+                metrics: { ...s.metrics, uptime: t('service.uptime.stopping') },
               }
             : s,
         ),
@@ -248,7 +247,7 @@ export function DashboardPage() {
         .stopModule(key)
         .then((result) => {
           if (!result || !result.success) {
-            const message = result?.error ?? '停止模块失败，请检查 Docker 状态。'
+            const message = result?.error ?? t('errors.stopModuleFailed')
             setServices((prev) =>
               prev.map((s) =>
                 s.key === key
@@ -266,7 +265,7 @@ export function DashboardPage() {
           }
         })
         .catch(() => {
-          const message = '停止模块失败，请检查 Docker 状态。'
+          const message = t('errors.stopModuleFailed')
           setServices((prev) =>
             prev.map((s) =>
               s.key === key
@@ -287,7 +286,7 @@ export function DashboardPage() {
             ? {
                 ...s,
                 status: 'starting',
-                metrics: { ...s.metrics, uptime: '启动中…' },
+                metrics: { ...s.metrics, uptime: t('service.uptime.starting') },
                 lastError: null,
               }
             : s,
@@ -298,7 +297,7 @@ export function DashboardPage() {
         .startModule(key)
         .then((result) => {
           if (!result || !result.success) {
-            const message = result?.error ?? '启动模块失败，请检查 Docker 状态。'
+            const message = result?.error ?? t('errors.startModuleFailed')
             setServices((prev) =>
               prev.map((s) =>
                 s.key === key
@@ -316,7 +315,7 @@ export function DashboardPage() {
           }
         })
         .catch(() => {
-          const message = '启动模块失败，请检查 Docker 状态。'
+          const message = t('errors.startModuleFailed')
           setServices((prev) =>
             prev.map((s) =>
               s.key === key
@@ -371,7 +370,7 @@ export function DashboardPage() {
     try {
       const result = await window.api.startDockerDesktop()
       if (!result || !result.success) {
-        window.alert(result?.error ?? '无法启动 Docker 服务，请手动启动 Docker Desktop。')
+        window.alert(result?.error ?? t('errors.dockerStartFailed'))
         setIsStartingDocker(false)
         return
       }
@@ -388,7 +387,7 @@ export function DashboardPage() {
 
           if (!status.installed) {
             setIsStartingDocker(false)
-            window.alert(status.error ?? '检测到本机未正确安装 Docker，请先安装 Docker Desktop。')
+            window.alert(status.error ?? t('errors.dockerNotInstalled'))
             return
           }
 
@@ -400,14 +399,14 @@ export function DashboardPage() {
           const elapsed = Date.now() - startTime
           if (elapsed >= 60_000) {
             setIsStartingDocker(false)
-            window.alert(status.error ?? 'Docker 启动超时，请手动确认 Docker Desktop 状态。')
+            window.alert(status.error ?? t('errors.dockerTimeout'))
             return
           }
         } catch (_err) {
           errorCount += 1
           if (errorCount >= maxErrorCount) {
             setIsStartingDocker(false)
-            window.alert('检测 Docker 状态失败，请手动确认 Docker Desktop 是否已启动。')
+            window.alert(t('errors.dockerStatusCheckFailed'))
             return
           }
         }
@@ -418,7 +417,7 @@ export function DashboardPage() {
       window.setTimeout(poll, delayMs)
     } catch (_err) {
       setIsStartingDocker(false)
-      window.alert('无法启动 Docker 服务，请手动启动 Docker Desktop。')
+      window.alert(t('errors.dockerStartFailed'))
     }
   }
 
@@ -469,6 +468,7 @@ interface BrowserAgentCardProps {
 }
 
 function BrowserAgentCard({ enabled, port, runtime, onOpen }: BrowserAgentCardProps) {
+  const { t } = useTranslation('dashboard')
   const cpu = runtime && runtime.cpuUsage != null ? Math.round(runtime.cpuUsage) : 0
   const memory = runtime && runtime.memoryUsage != null ? Math.round(runtime.memoryUsage) : 0
   const runningSessions = runtime ? runtime.runningSessions : 0
@@ -489,19 +489,25 @@ function BrowserAgentCard({ enabled, port, runtime, onOpen }: BrowserAgentCardPr
                 <span className="text-xs font-semibold uppercase">BA</span>
               </span>
               <div>
-                <CardTitle>AI 浏览器 · Browser Agent</CardTitle>
-                <CardDescription>查看本地 Browser Agent 执行的历史会话与截图，仅做只读复盘。</CardDescription>
+                <CardTitle>{t('browserAgent.title')}</CardTitle>
+                <CardDescription>{t('browserAgent.description')}</CardDescription>
               </div>
             </div>
           </div>
           <div className="flex flex-col items-end gap-1 text-xs">
             <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600 dark:bg-slate-800/80 dark:text-slate-300">
               <StatusDot status={enabled ? 'running' : 'stopped'} />
-              <span>{enabled ? '已启用' : '未启用'}</span>
+              <span>{enabled ? t('browserAgent.enabled') : t('browserAgent.disabled')}</span>
             </div>
             <div className="flex items-center gap-2 text-[10px] text-slate-400">
-              {port != null && <span>端口 {port}</span>}
-              <span>会话 {runningSessions}</span>
+              {port != null && (
+                <span>
+                  {t('browserAgent.port')} {port}
+                </span>
+              )}
+              <span>
+                {t('browserAgent.sessions')} {runningSessions}
+              </span>
             </div>
           </div>
         </div>
@@ -514,7 +520,7 @@ function BrowserAgentCard({ enabled, port, runtime, onOpen }: BrowserAgentCardPr
             </span>
             <div className="flex-1">
               <div className="flex items-center justify-between text-[11px]">
-                <span>CPU</span>
+                <span>{t('browserAgent.cpu')}</span>
                 <span className="font-semibold text-slate-800 dark:text-slate-100">{cpu}%</span>
               </div>
               <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200">
@@ -531,7 +537,7 @@ function BrowserAgentCard({ enabled, port, runtime, onOpen }: BrowserAgentCardPr
             </span>
             <div className="flex-1">
               <div className="flex items-center justify-between text-[11px]">
-                <span>内存</span>
+                <span>{t('browserAgent.memory')}</span>
                 <span className="font-semibold text-slate-800 dark:text-slate-100">{memory}%</span>
               </div>
               <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200">
@@ -553,7 +559,7 @@ function BrowserAgentCard({ enabled, port, runtime, onOpen }: BrowserAgentCardPr
             onClick={onOpen}
           >
             <ExternalLink className="mr-1 h-3 w-3" />
-            打开
+            {t('browserAgent.open')}
           </Button>
         </div>
       </CardContent>

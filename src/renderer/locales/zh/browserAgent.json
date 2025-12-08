@@ -1,0 +1,101 @@
+{
+  "header": {
+    "title": "AI 浏览器 · 会话观察",
+    "statusUnknown": "状态未知",
+    "statusEnabled": "Browser Agent 已启用",
+    "statusDisabled": "Browser Agent 未启用",
+    "portLabel": "端口 {{port}}"
+  },
+  "filters": {
+    "statusAll": "全部状态",
+    "statusRunning": "运行中",
+    "statusClosed": "已关闭",
+    "searchPlaceholder": "搜索 session / profile / clientId / 域名"
+  },
+  "status": {
+    "running": "运行中",
+    "closed": "已关闭",
+    "error": "异常"
+  },
+  "list": {
+    "title": "会话列表",
+    "description": "按日期从 NDJSON 中聚合出的会话记录，仅供只读观察。",
+    "loading": "加载中…",
+    "count": "共 {{count}} 条",
+    "empty": "当前日期下暂无 Browser Agent 会话记录。",
+    "steps": "{{count}} 步",
+    "profile": "profile: {{value}}",
+    "client": "client: {{value}}",
+    "domain": "域名: {{value}}"
+  },
+  "detail": {
+    "title": "会话详情",
+    "description": "仅从本地 NDJSON 元数据与截图文件中还原，不会重新执行历史操作。",
+    "selectHint": "请先在左侧选择一个 Session 进行查看。",
+    "loading": "正在加载 Session 详情…",
+    "lastAction": "最后动作：{{action}}",
+    "sessionActions": "动作数：{{count}}",
+    "sessionLastAction": "最后动作：{{type}}",
+    "showWindow": "显示浏览器窗口",
+    "showWindowLoading": "正在尝试显示…",
+    "showWindowInfo": "本页仅做可视化复盘，不会自动重新执行历史操作。"
+  },
+  "redirectTable": {
+    "http": "HTTP",
+    "duration": "耗时",
+    "url": "URL",
+    "baseNavigate": "打开 URL：{{url}}",
+    "baseNavigateNoUrl": "打开页面",
+    "collapseTip": "共 {{total}} 条重定向，点击展开中间 {{middle}} 条",
+    "hint": "提示：点击中间行可展开完整重定向链。"
+  },
+  "actions": {
+    "navigate": "打开页面",
+    "navigateAuto": "页面跳转",
+    "navigateAutoTo": "页面跳转到：{{url}}",
+    "click": "点击元素",
+    "clickWithSelector": "点击元素：{{selector}}",
+    "fill": "输入文本",
+    "fillWithSelector": "在 {{selector}} 中输入：{{text}}",
+    "fillWithText": "输入文本：{{text}}",
+    "screenshot": "截图",
+    "screenshotWithDesc": "截图：{{desc}}",
+    "screenshotWithMode": "截图模式：{{mode}}",
+    "unknown": "未知操作"
+  },
+  "timeline": {
+    "title": "动作时间线（按时间顺序）",
+    "empty": "当前 Session 暂无记录到的动作。",
+    "durationMs": "{{ms}} ms",
+    "durationSec": "{{sec}} s",
+    "durationMinSec": "{{min}} 分 {{sec}} 秒"
+  },
+  "files": {
+    "unknownSize": "未知大小",
+    "sizeB": "{{value}} B",
+    "sizeKB": "{{value}} KB",
+    "sizeMB": "{{value}} MB",
+    "sizeGB": "{{value}} GB",
+    "openSnapshot": "查看截图",
+    "openingSnapshot": "正在打开…"
+  },
+  "errors": {
+    "ipcListNotRegistered": "Browser Agent IPC 尚未注册，请确认是通过桌面客户端运行，并已重新启动应用。",
+    "loadSessionsFail": "加载会话列表失败。",
+    "detailIpcNotRegistered": "Browser Agent 详情 IPC 尚未注册，请确认是通过桌面客户端运行。",
+    "detailNotFound": "未找到该 Session 的详细信息（可能已被清理或日期不匹配）。",
+    "loadDetailFail": "加载 Session 详情失败。",
+    "showWindowDefault": "无法显示浏览器窗口。",
+    "showWindowInvalidSession": "无效的 Session ID，无法显示窗口。",
+    "showWindowNotFound": "Session 已不在内存中，可能应用已经重启或 Session 已结束。",
+    "showWindowNoWindow": "该 Session 没有关联窗口，可能从未成功打开过浏览器。",
+    "showWindowClosed": "浏览器窗口已经关闭，无法再次显示。",
+    "showWindowFail": "显示浏览器窗口失败，请稍后重试。",
+    "actionFailedPrefix": "失败：",
+    "openSnapshotFail": "打开截图失败，请检查文件是否仍然存在。",
+    "openSnapshotRetry": "打开截图失败，请稍后重试。"
+  },
+  "toasts": {
+    "showWindowSuccess": "已尝试显示浏览器窗口，请切回桌面查看。"
+  }
+}

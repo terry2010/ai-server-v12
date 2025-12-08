@@ -1,0 +1,379 @@
+{
+  "title": "Settings Center",
+  "subtitle": "System & module configuration",
+  "tabs": {
+    "system": "System",
+    "network": "Network",
+    "agent": "AI Browser",
+    "n8n": "n8n",
+    "dify": "Dify",
+    "oneapi": "OneAPI",
+    "ragflow": "RagFlow",
+    "debug": "Debug"
+  },
+  "system": {
+    "cardTitle": "System settings",
+    "cardDesc": "Configure basic platform info and runtime policies.",
+    "systemName": "System name",
+    "systemNameDesc": "Shown in the top bar and sidebar as the product name.",
+    "systemNamePlaceholder": "AI-Server Control Center",
+    "language": "Language",
+    "languageDesc": "Switch UI language.",
+    "languageOptions": {
+      "auto": "Follow system (recommended)",
+      "zh": "中文",
+      "en": "English"
+    },
+    "logLevel": "Log level",
+    "logLevelDesc": "Control verbosity of logs.",
+    "autoStart": "Auto start",
+    "autoStartDesc": "Start core containers when app launches.",
+    "save": "Save",
+    "reset": "Reset to default"
+  },
+  "agent": {
+    "cardTitle": "AI Browser settings",
+    "cardDesc": "Configure the local Browser Agent HTTP service used by n8n and others. It only listens on 127.0.0.1. For production, set a strong token.",
+    "loadingTitle": "Agent settings",
+    "loadingDesc": "Loading configuration…",
+    "enable": {
+      "label": "Enable Browser Agent",
+      "desc": "When enabled, start a local Browser Agent HTTP service on 127.0.0.1."
+    },
+    "port": {
+      "label": "Service port",
+      "desc": "Local port for Browser Agent HTTP service. Only 1024-65535 are allowed.",
+      "placeholder": "26080"
+    },
+    "example": {
+      "label": "Example endpoint",
+      "desc": "Use this as a reference URL in n8n HTTP nodes, etc."
+    },
+    "token": {
+      "label": "Access token",
+      "desc": "Optional. If set, all HTTP requests must send X-Browser-Agent-Token or Authorization: Bearer <token>. Leave empty to disable auth.",
+      "placeholder": "It is recommended to use a sufficiently random string, e.g. a 32–64 character token."
+    },
+    "dataRoot": {
+      "label": "Data/log directory (optional)",
+      "desc": "Directory for Browser Agent text logs, NDJSON metadata, screenshots and downloaded files. Leave empty to use the default data directory.",
+      "placeholder": "Example: C:\\ai-server-data\\browser-agent"
+    },
+    "footerTip": "After changing the port, it is recommended to restart the app so Browser Agent listens on the new port.",
+    "saveButton": {
+      "idle": "Save Agent settings",
+      "saving": "Saving…"
+    }
+  },
+  "network": {
+    "cardTitle": "Network settings",
+    "cardDesc": "Configure image mirrors, proxy and network access policy.",
+    "loadingTitle": "Network settings",
+    "loadingDesc": "Loading configuration…",
+    "mirrors": {
+      "label": "Image mirrors",
+      "desc": "Configure multiple Docker registry mirrors.",
+      "primaryPlaceholder": "https://registry.docker-cn.com",
+      "secondaryPlaceholder": "https://hub-mirror.example.com",
+      "add": "Add mirror"
+    },
+    "proxyMode": {
+      "label": "Proxy mode",
+      "desc": "Use proxy to access external services in restricted networks.",
+      "options": {
+        "direct": "Direct",
+        "system": "System proxy",
+        "manual": "Manual"
+      }
+    },
+    "proxyHost": {
+      "label": "Proxy host",
+      "desc": "Only effective when manual proxy is selected.",
+      "placeholder": "127.0.0.1"
+    },
+    "proxyPort": {
+      "label": "Proxy port",
+      "desc": "For example 7890 or 1080.",
+      "placeholder": "7890"
+    },
+    "buttons": {
+      "save": "Save network settings",
+      "test": "Test connection"
+    },
+    "test": {
+      "success": "Connection test succeeded. Docker can pull images via current proxy.",
+      "fail": "Connection test failed. Please check Docker and proxy configuration."
+    }
+  },
+  "modules": {
+    "n8n": {
+      "title": "n8n settings",
+      "cardDesc": "Configure n8n ports, database and environment variables.",
+      "loadingDesc": "Loading n8n configuration…",
+      "toastDisableRunningWarn": "n8n is currently running and cannot be disabled. Please stop the service on the Dashboard first.",
+      "toastDisableStatusError": "Failed to check n8n runtime status. Disabling is temporarily unavailable.",
+      "toastSecretNotGenerated": "Secrets are not generated yet. Please start n8n first.",
+      "toastCopySuccess": "{{key}} has been copied to clipboard.",
+      "toastCopyFail": "Copy failed. Please copy manually.",
+      "toastApplyRestartFail": "Failed to apply settings and restart n8n. Please try again.",
+      "toastApplyRestartSuccess": "n8n settings applied and service restarted.",
+      "backupCancelled": "n8n backup cancelled.",
+      "backupFailed": "Failed to back up n8n data. Please try again.",
+      "backupCompletedWithPath": "n8n data has been backed up to: {{path}}",
+      "backupCompleted": "n8n data backup completed.",
+      "restoreConfirm": "This will overwrite all current n8n data with the selected backup and may be irreversible. Continue?",
+      "restoreCancelled": "n8n restore cancelled.",
+      "restoreFailed": "Failed to restore n8n data. Please try again.",
+      "restoreCompleted": "n8n data restore completed.",
+      "fields": {
+        "enabledLabel": "Enable n8n module",
+        "enabledDesc": "When disabled, the n8n module will not appear in the console.",
+        "portLabel": "Service port",
+        "portDesc": "Port on the host mapped from the n8n container.",
+        "portPlaceholder": "5678",
+        "consoleLabel": "n8n console URL",
+        "consoleDesc": "Derived from localhost and port, for reference only.",
+        "consoleEmpty": "Configure the service port first.",
+        "webhookLabel": "Webhook external URL",
+        "webhookDesc": "Reference URL when n8n generates webhooks.",
+        "webhookEmpty": "Configure the service port first.",
+        "logLevelLabel": "n8n log level",
+        "logLevelDesc": "Affects only n8n application logs.",
+        "dbModeLabel": "Database mode (experimental)",
+        "dbModeDesc": "Choose between managed Postgres or external PostgreSQL.",
+        "dbModeManaged": "Managed Postgres",
+        "dbModeExternal": "External PostgreSQL",
+        "extHostLabel": "External DB host",
+        "extHostDesc": "Host of external PostgreSQL service.",
+        "extHostPlaceholder": "localhost",
+        "extPortLabel": "External DB port",
+        "extPortDesc": "Usually 5432.",
+        "extPortPlaceholder": "5432",
+        "extDbNameLabel": "Database name",
+        "extDbNameDesc": "Database name used by n8n.",
+        "extDbNamePlaceholder": "n8n",
+        "extUserLabel": "Database user",
+        "extUserDesc": "User to connect to the external database.",
+        "extUserPlaceholder": "n8n",
+        "extPasswordLabel": "Database password",
+        "extPasswordDesc": "Password for the external database.",
+        "extPasswordPlaceholder": "••••••••",
+        "envLabel": "Environment variables",
+        "envDesc": "One per line in KEY=VALUE format (excluding fields configured above).",
+        "envPlaceholder": "OPENAI_API_KEY=sk-...\nHTTP_PROXY=http://127.0.0.1:7890",
+        "secretsLabel": "Secrets",
+        "secretsDesc": "Generated on first n8n start to encrypt credentials etc. Not editable here.",
+        "secretEncryptionLabel": "Credential encryption key N8N_ENCRYPTION_KEY",
+        "secretJwtLabel": "JWT secret N8N_JWT_SECRET",
+        "secretUserJwtLabel": "User-management JWT secret N8N_USER_MANAGEMENT_JWT_SECRET",
+        "secretNotGenerated": "Not generated yet (will be created when n8n starts).",
+        "copyButton": "Copy",
+        "hideButton": "Hide",
+        "showButton": "Show",
+        "backupLabel": "Data backup & restore",
+        "backupDesc": "Back up the n8n module database or restore from a backup (understand the risk before proceeding).",
+        "backupLoading": "Backing up…",
+        "backupButton": "Back up data",
+        "restoreLoading": "Restoring…",
+        "restoreButton": "Restore backup",
+        "saveButton": "Save n8n settings",
+        "applying": "Applying…",
+        "applyRestartButton": "Apply & restart"
+      }
+    },
+    "dify": {
+      "title": "Dify settings",
+      "cardDesc": "Configure Dify ports and environment variables (reuses existing DB and Redis instances).",
+      "loadingDesc": "Loading Dify configuration…",
+      "toastDisableRunningWarn": "Dify is currently running and cannot be disabled. Please stop the service on the Dashboard first.",
+      "toastDisableStatusError": "Failed to check Dify runtime status. Disabling is temporarily unavailable.",
+      "toastApplyRestartFail": "Failed to apply settings and restart Dify. Please try again.",
+      "toastApplyRestartSuccess": "Dify settings applied and service restarted.",
+      "fields": {
+        "enabledLabel": "Enable Dify module",
+        "enabledDesc": "When disabled, the Dify module will not appear in the console.",
+        "portLabel": "Service port",
+        "portDesc": "Port on the host mapped from the Dify Web container.",
+        "portPlaceholder": "80",
+        "consoleLabel": "Dify console URL",
+        "consoleDesc": "Derived from localhost and port, for reference only.",
+        "consoleEmpty": "Configure the service port first.",
+        "envLabel": "Environment variables",
+        "envDesc": "One per line in KEY=VALUE format (excluding DB/Redis connection fields).",
+        "envPlaceholder": "FILES_URL=http://localhost:5001\nVECTOR_STORE=weaviate",
+        "saveButton": "Save Dify settings",
+        "applying": "Applying…",
+        "applyRestartButton": "Apply & restart"
+      }
+    },
+    "oneapi": {
+      "title": "OneAPI settings",
+      "cardDesc": "Configure OneAPI ports, logging and database options.",
+      "loadingDesc": "Loading OneAPI configuration…",
+      "toastDisableRunningWarn": "OneAPI is currently running and cannot be disabled. Please stop the service on the Dashboard first.",
+      "toastDisableStatusError": "Failed to check OneAPI runtime status. Disabling is temporarily unavailable.",
+      "toastSecretNotGenerated": "Secrets are not generated yet. Please start OneAPI first.",
+      "toastCopySuccess": "{{key}} has been copied to clipboard.",
+      "toastCopyFail": "Copy failed. Please copy manually.",
+      "toastApplyRestartFail": "Failed to apply settings and restart OneAPI. Please try again.",
+      "toastApplyRestartSuccess": "OneAPI settings applied and service restarted.",
+      "backupCancelled": "OneAPI backup cancelled.",
+      "backupFailed": "Failed to back up OneAPI data. Please try again.",
+      "backupCompletedWithPath": "OneAPI data has been backed up to: {{path}}",
+      "backupCompleted": "OneAPI data backup completed.",
+      "restoreConfirm": "This will overwrite all current OneAPI data with the selected backup and may be irreversible. Continue?",
+      "restoreCancelled": "OneAPI restore cancelled.",
+      "restoreFailed": "Failed to restore OneAPI data. Please try again.",
+      "restoreCompleted": "OneAPI data restore completed.",
+      "fields": {
+        "enabledLabel": "Enable OneAPI module",
+        "enabledDesc": "When disabled, the OneAPI module will not appear in the console.",
+        "portLabel": "Service port",
+        "portDesc": "Port on the host mapped from the OneAPI container.",
+        "portPlaceholder": "3000",
+        "apiLabel": "OneAPI API endpoint",
+        "apiDesc": "Derived from localhost and port, for reference only.",
+        "apiEmpty": "Configure the service port first.",
+        "logFieldLabel": "Log level",
+        "logFieldDesc": "Control whether to enable OneAPI debug logs (DEBUG / DEBUG_SQL).",
+        "logToggleDebug": "Enable DEBUG logs (DEBUG)",
+        "logToggleSql": "Enable SQL debug logs (DEBUG_SQL)",
+        "dbModeLabel": "Database mode (experimental)",
+        "dbModeDesc": "Choose between managed MySQL + Redis or external MySQL / Redis.",
+        "dbModeManaged": "Managed MySQL + Redis (recommended)",
+        "dbModeExternal": "External MySQL / Redis",
+        "extSqlDsnLabel": "External DB SQL_DSN",
+        "extSqlDsnDesc": "For example root:123456@tcp(localhost:3306)/oneapi.",
+        "extSqlDsnPlaceholder": "root:123456@tcp(localhost:3306)/oneapi",
+        "extRedisLabel": "External Redis connection string",
+        "extRedisDesc": "For example redis://localhost:6379.",
+        "extRedisPlaceholder": "redis://localhost:6379",
+        "envLabel": "Environment variables",
+        "envDesc": "One per line in KEY=VALUE format (excluding fields configured above).",
+        "envPlaceholder": "OPENAI_API_KEY=sk-...\nHTTP_PROXY=http://127.0.0.1:7890",
+        "secretsLabel": "Secrets",
+        "secretsDesc": "Generated on first OneAPI start for session encryption etc. Not editable here.",
+        "secretSessionLabel": "Session secret SESSION_SECRET",
+        "secretNotGenerated": "Not generated yet (will be created when OneAPI starts).",
+        "copyButton": "Copy",
+        "hideButton": "Hide",
+        "showButton": "Show",
+        "backupLabel": "Data backup & restore",
+        "backupDesc": "Back up the OneAPI module database or restore from a backup (understand the risk before proceeding).",
+        "backupLoading": "Backing up…",
+        "backupButton": "Back up data",
+        "restoreLoading": "Restoring…",
+        "restoreButton": "Restore backup",
+        "saveButton": "Save OneAPI settings",
+        "applying": "Applying…",
+        "applyRestartButton": "Apply & restart"
+      }
+    },
+    "ragflow": {
+      "title": "RagFlow settings",
+      "cardDesc": "Configure RagFlow ports, database/storage and environment variables.",
+      "loadingDesc": "Loading RagFlow configuration…",
+      "toastDisableRunningWarn": "RagFlow is currently running and cannot be disabled. Please stop the service on the Dashboard first.",
+      "toastDisableStatusError": "Failed to check RagFlow runtime status. Disabling is temporarily unavailable.",
+      "toastApplyRestartFail": "Failed to apply settings and restart RagFlow. Please try again.",
+      "toastApplyRestartSuccess": "RagFlow settings applied and service restarted.",
+      "fields": {
+        "enabledLabel": "Enable RagFlow module",
+        "enabledDesc": "When disabled, the RagFlow module will not appear in the console.",
+        "portLabel": "Service port",
+        "portDesc": "Port on the host mapped from the RagFlow HTTP service (container listens on 80, proxied by nginx to 9380).",
+        "portPlaceholder": "9380",
+        "consoleLabel": "RagFlow console URL",
+        "consoleDesc": "Derived from localhost and port, for reference only.",
+        "consoleEmpty": "Configure the service port first.",
+        "modelCacheLabel": "Model cache directory (optional)",
+        "modelCacheDesc": "Leave empty to use the default cache path inside the container. If set, this directory will be mounted to /root/.ragflow to store HuggingFace and other model caches.",
+        "modelCachePlaceholder": "C:\\ragflow-cache\\.ragflow",
+        "connectionsLabel": "DB / Redis / MinIO connections (advanced)",
+        "connectionsDesc": "By default the built-in MySQL / Redis / MinIO are reused. Usually you do not need to change this. To customize, override related env variables below.",
+        "connectionsMysql": "MySQL: MYSQL_DBNAME / MYSQL_USER / MYSQL_PASSWORD / MYSQL_HOST / MYSQL_PORT",
+        "connectionsRedis": "Redis: REDIS_HOST / REDIS_PORT / REDIS_PASSWORD",
+        "connectionsMinio": "MinIO: MINIO_USER / MINIO_PASSWORD / MINIO_HOST",
+        "logLabel": "Logging & debug",
+        "logDesc": "Control RagFlow internal logging via LOG_LEVELS and DEBUG.",
+        "logToggleDebug": "Enable debug mode (DEBUG=true)",
+        "logAdvancedTip": "Advanced: set LOG_LEVELS in env (e.g. root=INFO,peewee=WARNING).",
+        "envLabel": "Environment variables",
+        "envDesc": "One per line in KEY=VALUE format (excluding reserved fields listed above).",
+        "envPlaceholder": "RAGFLOW_EXTRA_OPTION=value\nHF_ENDPOINT=http://your-hf-mirror.example.com",
+        "saveButton": "Save RagFlow settings",
+        "applying": "Applying…",
+        "applyRestartButton": "Apply & restart"
+      }
+    },
+    "generic": {
+      "cardDesc": "Configure module ports, database and environment variables.",
+      "fields": {
+        "enabledLabel": "Enable module",
+        "enabledDesc": "When disabled, this module will not appear in the console.",
+        "portLabel": "Service port",
+        "portDesc": "Port on the host mapped from the container.",
+        "portPlaceholderDefault": "8080",
+        "portPlaceholderRagflow": "9500",
+        "dbUrlLabel": "Database URL",
+        "dbUrlDesc": "Optional. Leave empty to use the module's built-in storage or default config.",
+        "dbUrlPlaceholder": "postgres://user:pass@localhost:5432/dbname",
+        "envLabel": "Environment variables",
+        "envDesc": "One per line in KEY=VALUE format.",
+        "envPlaceholder": "OPENAI_API_KEY=sk-...\nHTTP_PROXY=http://127.0.0.1:7890",
+        "saveButton": "Save module settings",
+        "applyRestartButton": "Apply & restart"
+      }
+    }
+  },
+  "toast": {
+    "saveSuccess": "Settings saved",
+    "saveFail": "Failed to save, please retry."
+  },
+  "debug": {
+    "clearStorageTitle": "Clear local storage",
+    "clearStorageDesc": "Delete all localStorage entries used by this app (language, UI state, etc.) to troubleshoot issues. The app will reload afterwards.",
+    "clearStorageButton": "Delete all local storage",
+    "clearStorageConfirm": "Are you sure you want to delete all localStorage data for this app? This will reset language and other preferences.",
+    "clearStorageSuccess": "localStorage cleared. Reloading…",
+    "clearStorageFail": "Failed to clear localStorage. Please try again."
+  },
+  "debugPage": {
+    "cardDesc": "Advanced options for troubleshooting and development.",
+    "showTools": {
+      "label": "Show debug tools",
+      "desc": "Display additional debug entry points in the UI."
+    },
+    "verboseLogging": {
+      "label": "Verbose logging",
+      "desc": "Enable to output more debug logs."
+    },
+    "showSystemName": {
+      "label": "Show system-name setting",
+      "desc": "When off, hide the \"Product name\" field in system settings."
+    },
+    "browserViewIdleMinutes": {
+      "label": "Module BrowserView idle destroy time (minutes)",
+      "desc": "Destroy module BrowserViews after being idle in the background for this duration to free memory."
+    }
+  },
+  "debugActions": {
+    "stopAll": "Stop all containers",
+    "removeAll": "Remove all containers",
+    "pruneVolumes": "Prune all volumes",
+    "fullCleanup": "Full cleanup",
+    "unknown": "Unknown debug action.",
+    "fail": "Failed to run debug action, check Docker.",
+    "successStop": "All containers stopped.",
+    "successRemove": "All containers removed.",
+    "successPrune": "All volumes pruned.",
+    "successFull": "Full cleanup completed."
+  },
+  "dangerDialog": {
+    "title": "Confirm dangerous operation?",
+    "description": "You are about to perform \"{{action}}\". This may remove containers or volumes. Make sure important data is backed up.",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "executing": "Executing…"
+  }
+}

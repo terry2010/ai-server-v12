@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { LogsFilterBar } from './logs/LogsFilterBar'
 import { LogsTable } from './logs/LogsTable'
 import { LogsPaginationBar } from './logs/LogsPaginationBar'
+import { useTranslation } from 'react-i18next'
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug'
 
@@ -227,6 +228,7 @@ const mockLogs: LogItem[] = [
 ]
 
 export function LogsPage() {
+  const { t } = useTranslation('logs')
   const [searchParams] = useSearchParams()
   const [moduleFilter, setModuleFilter] = useState<'all' | LogItem['module']>('all')
   const [levelFilter, setLevelFilter] = useState<'all' | LogLevel>('all')
@@ -399,12 +401,16 @@ export function LogsPage() {
         level: levelFilter === 'all' ? undefined : levelFilter,
       })
       if (result && result.success) {
-        window.alert(`日志已导出到：${result.path}`)
+        window.alert(
+          t('messages.exportSuccess', {
+            path: result.path,
+          }),
+        )
       } else {
-        window.alert('日志导出失败，请稍后重试。')
+        window.alert(t('messages.exportFail'))
       }
     } catch (_err) {
-      window.alert('日志导出失败，请稍后重试。')
+      window.alert(t('messages.exportFail'))
     } finally {
       setExporting(false)
     }

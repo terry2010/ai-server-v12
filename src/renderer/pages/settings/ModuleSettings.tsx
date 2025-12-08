@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Field } from './Field'
+import { useTranslation } from 'react-i18next'
 
 interface ModuleSettingsProps {
   moduleKey: 'n8n' | 'dify' | 'oneapi' | 'ragflow'
@@ -26,11 +27,13 @@ export function ModuleSettings({
   onChange,
   onSave,
 }: ModuleSettingsProps) {
+  const { t } = useTranslation('settings')
+
   const titleMap: Record<ModuleSettingsProps['moduleKey'], string> = {
-    n8n: 'n8n 设置',
-    dify: 'Dify 设置',
-    oneapi: 'OneAPI 设置',
-    ragflow: 'RagFlow 设置',
+    n8n: 'modules.n8n.title',
+    dify: 'modules.dify.title',
+    oneapi: 'modules.oneapi.title',
+    ragflow: 'modules.ragflow.title',
   }
 
   const [visibleSecretKey, setVisibleSecretKey] = useState<string | null>(null)
@@ -79,8 +82,8 @@ export function ModuleSettings({
     return (
       <Card className="border-none bg-transparent shadow-none">
         <CardHeader className="px-0">
-          <CardTitle>{titleMap[moduleKey]}</CardTitle>
-          <CardDescription>正在加载配置…</CardDescription>
+          <CardTitle>{t(titleMap[moduleKey])}</CardTitle>
+          <CardDescription>{t(`modules.${moduleKey}.loadingDesc`)}</CardDescription>
         </CardHeader>
       </Card>
     )
@@ -244,12 +247,12 @@ export function ModuleSettings({
           const modules = await window.api.listModules()
           const target = modules.find((m) => m.id === 'n8n')
           if (target && (target.status === 'running' || target.status === 'starting')) {
-            toast.warning('n8n 模块正在运行，无法禁用。请先在首页停止服务后再尝试禁用。')
+            toast.warning(t('modules.n8n.toastDisableRunningWarn'))
             updateModule({ enabled: true })
             return
           }
         } catch {
-          toast.error('检查 n8n 运行状态失败，暂时无法禁用。')
+          toast.error(t('modules.n8n.toastDisableStatusError'))
           updateModule({ enabled: true })
           return
         }
@@ -267,15 +270,19 @@ export function ModuleSettings({
     const handleCopySecret = async (key: keyof typeof secretEnv) => {
       const value = secretEnv[key]
       if (!value) {
-        toast.error('秘钥尚未生成，请先启动 n8n。')
+        toast.error(t('modules.n8n.toastSecretNotGenerated'))
         return
       }
 
       try {
         await navigator.clipboard.writeText(value)
-        toast.success(`${String(key)} 已复制到剪贴板。`)
+        toast.success(
+          t('modules.n8n.toastCopySuccess', {
+            key: String(key),
+          }),
+        )
       } catch {
-        toast.error('复制失败，请手动复制。')
+        toast.error(t('modules.n8n.toastCopyFail'))
       }
     }
 
@@ -288,12 +295,12 @@ export function ModuleSettings({
 
         const result = await window.api.restartN8n()
         if (!result || !result.success) {
-          toast.error(result?.error ?? '应用并重启 n8n 失败，请稍后重试。')
+          toast.error(result?.error ?? t('modules.n8n.toastApplyRestartFail'))
         } else {
-          toast.success('n8n 设置已应用并重启。')
+          toast.success(t('modules.n8n.toastApplyRestartSuccess'))
         }
       } catch {
-        toast.error('应用并重启 n8n 失败，请稍后重试。')
+        toast.error(t('modules.n8n.toastApplyRestartFail'))
       } finally {
         setApplyingRestart(false)
       }
@@ -305,20 +312,24 @@ export function ModuleSettings({
       try {
         const result = await window.api.backupModuleData('n8n')
         if (!result || (result as any).cancelled) {
-          window.alert('已取消备份 n8n 数据。')
+          window.alert(t('modules.n8n.backupCancelled'))
           return
         }
         if (!result.success) {
-          window.alert(result.error ?? '备份 n8n 数据失败，请稍后重试。')
+          window.alert(result.error ?? t('modules.n8n.backupFailed'))
           return
         }
         if (result.path) {
-          window.alert(`n8n 数据已备份到：${result.path}`)
+          window.alert(
+            t('modules.n8n.backupCompletedWithPath', {
+              path: result.path,
+            }),
+          )
         } else {
-          window.alert('n8n 数据备份完成。')
+          window.alert(t('modules.n8n.backupCompleted'))
         }
       } catch {
-        window.alert('备份 n8n 数据失败，请稍后重试。')
+        window.alert(t('modules.n8n.backupFailed'))
       } finally {
         setBackupLoading(false)
       }
@@ -327,7 +338,7 @@ export function ModuleSettings({
     const handleRestoreData = async () => {
       if (restoreLoading) return
       const confirmed = window.confirm(
-        '此操作会使用所选备份覆盖当前 n8n 数据库中的所有数据，可能导致现有数据不可恢复。确定要继续吗？',
+        t('modules.n8n.restoreConfirm'),
       )
       if (!confirmed) return
 
@@ -335,16 +346,16 @@ export function ModuleSettings({
       try {
         const result = await window.api.restoreModuleData('n8n')
         if (!result || (result as any).cancelled) {
-          window.alert('已取消恢复 n8n 数据。')
+          window.alert(t('modules.n8n.restoreCancelled'))
           return
         }
         if (!result.success) {
-          window.alert(result.error ?? '恢复 n8n 数据失败，请稍后重试。')
+          window.alert(result.error ?? t('modules.n8n.restoreFailed'))
           return
         }
-        window.alert('n8n 数据恢复完成。')
+        window.alert(t('modules.n8n.restoreCompleted'))
       } catch {
-        window.alert('恢复 n8n 数据失败，请稍后重试。')
+        window.alert(t('modules.n8n.restoreFailed'))
       } finally {
         setRestoreLoading(false)
       }
@@ -353,37 +364,52 @@ export function ModuleSettings({
     return (
       <Card className="border-none bg-transparent shadow-none">
         <CardHeader className="px-0">
-          <CardTitle>{titleMap[moduleKey]}</CardTitle>
-          <CardDescription>配置 n8n 的端口、数据库和环境变量等参数。</CardDescription>
+          <CardTitle>{t('modules.n8n.title')}</CardTitle>
+          <CardDescription>{t('modules.n8n.cardDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 px-0">
-          <Field label="启用 n8n 模块" description="关闭后将不在控制台中展示和管理 n8n 模块。">
+          <Field
+            label={t('modules.n8n.fields.enabledLabel')}
+            description={t('modules.n8n.fields.enabledDesc')}
+          >
             <Switch checked={moduleSettings.enabled} onCheckedChange={handleEnabledChange} />
           </Field>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="服务端口" description="n8n 容器映射到本机的端口号。">
+            <Field
+              label={t('modules.n8n.fields.portLabel')}
+              description={t('modules.n8n.fields.portDesc')}
+            >
               <Input
-                placeholder="5678"
+                placeholder={t('modules.n8n.fields.portPlaceholder')}
                 className="font-mono text-xs"
                 value={moduleSettings.port ? String(moduleSettings.port) : ''}
                 onChange={(e) => handlePortChange(e.target.value)}
               />
             </Field>
-            <Field label="n8n 控制台 URL" description="基于 localhost 与端口推导，仅作为访问参考。">
+            <Field
+              label={t('modules.n8n.fields.consoleLabel')}
+              description={t('modules.n8n.fields.consoleDesc')}
+            >
               <div className="text-xs font-mono text-slate-700 dark:text-slate-200 break-all">
-                {consoleUrl || '请先配置服务端口'}
+                {consoleUrl || t('modules.n8n.fields.consoleEmpty')}
               </div>
             </Field>
           </div>
 
-          <Field label="Webhook 外网地址" description="n8n 生成 Webhook 时可参考的访问地址。">
+          <Field
+            label={t('modules.n8n.fields.webhookLabel')}
+            description={t('modules.n8n.fields.webhookDesc')}
+          >
             <div className="text-xs font-mono text-slate-700 dark:text-slate-200 break-all">
-              {webhookUrl || '请先配置服务端口'}
+              {webhookUrl || t('modules.n8n.fields.webhookEmpty')}
             </div>
           </Field>
 
-          <Field label="n8n 日志等级" description="仅影响 n8n 应用自身的日志输出级别。">
+          <Field
+            label={t('modules.n8n.fields.logLevelLabel')}
+            description={t('modules.n8n.fields.logLevelDesc')}
+          >
             <select
               className="h-9 w-full rounded-lg border border-slate-200/80 bg-white/90 px-3 text-sm text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               value={effectiveLogLevel}
@@ -396,54 +422,72 @@ export function ModuleSettings({
             </select>
           </Field>
 
-          <Field label="数据库模式（开发中）" description="选择使用内置托管 Postgres 或外部 PostgreSQL 数据库。">
+          <Field
+            label={t('modules.n8n.fields.dbModeLabel')}
+            description={t('modules.n8n.fields.dbModeDesc')}
+          >
             <select
               className="h-9 w-full rounded-lg border border-slate-200/80 bg-white/90 px-3 text-sm text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               value={dbMode}
               onChange={(e) => handleDbModeChange(e.target.value)}
             >
-              <option value="managed">内置托管 Postgres</option>
-              <option value="external">外部 PostgreSQL</option>
+              <option value="managed">{t('modules.n8n.fields.dbModeManaged')}</option>
+              <option value="external">{t('modules.n8n.fields.dbModeExternal')}</option>
             </select>
           </Field>
 
           {dbMode === 'external' && (
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="外部数据库主机" description="外部 PostgreSQL 服务地址。">
+              <Field
+                label={t('modules.n8n.fields.extHostLabel')}
+                description={t('modules.n8n.fields.extHostDesc')}
+              >
                 <Input
-                  placeholder="localhost"
+                  placeholder={t('modules.n8n.fields.extHostPlaceholder')}
                   className="font-mono text-xs"
                   value={dbHost}
                   onChange={(e) => handleExternalDbFieldChange('host', e.target.value)}
                 />
               </Field>
-              <Field label="外部数据库端口" description="通常为 5432。">
+              <Field
+                label={t('modules.n8n.fields.extPortLabel')}
+                description={t('modules.n8n.fields.extPortDesc')}
+              >
                 <Input
-                  placeholder="5432"
+                  placeholder={t('modules.n8n.fields.extPortPlaceholder')}
                   className="font-mono text-xs"
                   value={dbPort}
                   onChange={(e) => handleExternalDbFieldChange('port', e.target.value)}
                 />
               </Field>
-              <Field label="数据库名称" description="n8n 使用的数据库名称。">
+              <Field
+                label={t('modules.n8n.fields.extDbNameLabel')}
+                description={t('modules.n8n.fields.extDbNameDesc')}
+              >
                 <Input
-                  placeholder="n8n"
+                  placeholder={t('modules.n8n.fields.extDbNamePlaceholder')}
                   className="font-mono text-xs"
                   value={dbName}
                   onChange={(e) => handleExternalDbFieldChange('database', e.target.value)}
                 />
               </Field>
-              <Field label="数据库用户" description="用于连接外部数据库的用户名。">
+              <Field
+                label={t('modules.n8n.fields.extUserLabel')}
+                description={t('modules.n8n.fields.extUserDesc')}
+              >
                 <Input
-                  placeholder="n8n"
+                  placeholder={t('modules.n8n.fields.extUserPlaceholder')}
                   className="font-mono text-xs"
                   value={dbUser}
                   onChange={(e) => handleExternalDbFieldChange('user', e.target.value)}
                 />
               </Field>
-              <Field label="数据库密码" description="用于连接外部数据库的密码。">
+              <Field
+                label={t('modules.n8n.fields.extPasswordLabel')}
+                description={t('modules.n8n.fields.extPasswordDesc')}
+              >
                 <Input
-                  placeholder="••••••••"
+                  placeholder={t('modules.n8n.fields.extPasswordPlaceholder')}
                   type="password"
                   className="font-mono text-xs"
                   value={dbPassword}
@@ -453,31 +497,37 @@ export function ModuleSettings({
             </div>
           )}
 
-          <Field label="环境变量" description="一行一个，支持 KEY=VALUE 格式（不含上方已经配置的字段）">
+          <Field
+            label={t('modules.n8n.fields.envLabel')}
+            description={t('modules.n8n.fields.envDesc')}
+          >
             <textarea
               rows={4}
               className="w-full rounded-lg border border-slate-200/80 bg-white/90 px-3 py-2 text-xs font-mono text-slate-900 shadow-sm outline-none placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-0"
-              placeholder="OPENAI_API_KEY=sk-...&#10;HTTP_PROXY=http://127.0.0.1:7890"
+              placeholder={t('modules.n8n.fields.envPlaceholder')}
               value={otherEnvText}
               onChange={(e) => handleEnvTextChange(e.target.value)}
             />
           </Field>
 
-          <Field label="安全秘钥" description="首次启动 n8n 时自动生成，用于加密凭据等，暂不支持在此修改。">
+          <Field
+            label={t('modules.n8n.fields.secretsLabel')}
+            description={t('modules.n8n.fields.secretsDesc')}
+          >
             <div className="space-y-3 text-xs">
               {(
                 [
                   {
                     key: 'N8N_ENCRYPTION_KEY' as const,
-                    label: '凭据加密秘钥 N8N_ENCRYPTION_KEY',
+                    label: t('modules.n8n.fields.secretEncryptionLabel'),
                   },
                   {
                     key: 'N8N_JWT_SECRET' as const,
-                    label: 'JWT 秘钥 N8N_JWT_SECRET',
+                    label: t('modules.n8n.fields.secretJwtLabel'),
                   },
                   {
                     key: 'N8N_USER_MANAGEMENT_JWT_SECRET' as const,
-                    label: '用户管理 JWT 秘钥 N8N_USER_MANAGEMENT_JWT_SECRET',
+                    label: t('modules.n8n.fields.secretUserJwtLabel'),
                   },
                 ]
               ).map((item) => {
@@ -495,7 +545,7 @@ export function ModuleSettings({
                           ? visible
                             ? value
                             : masked
-                          : '尚未生成（启动 n8n 后将自动生成）'}
+                          : t('modules.n8n.fields.secretNotGenerated')}
                       </div>
                       <Button
                         variant="outline"
@@ -503,7 +553,7 @@ export function ModuleSettings({
                         className="h-7 px-2 text-[11px]"
                         onClick={() => handleCopySecret(item.key)}
                       >
-                        复制
+                        {t('modules.n8n.fields.copyButton')}
                       </Button>
                       <Button
                         variant="outline"
@@ -511,7 +561,9 @@ export function ModuleSettings({
                         className="h-7 px-2 text-[11px]"
                         onClick={() => setVisibleSecretKey(visible ? null : item.key)}
                       >
-                        {visible ? '隐藏' : '显示'}
+                        {visible
+                          ? t('modules.n8n.fields.hideButton')
+                          : t('modules.n8n.fields.showButton')}
                       </Button>
                     </div>
                   </div>
@@ -520,8 +572,8 @@ export function ModuleSettings({
             </div>
           </Field>
           <Field
-            label="数据备份与恢复"
-            description="备份当前 n8n 模块的数据库数据，或从备份文件中恢复（请在操作前确认已了解风险）。"
+            label={t('modules.n8n.fields.backupLabel')}
+            description={t('modules.n8n.fields.backupDesc')}
           >
             <div className="flex flex-wrap gap-2">
               <Button
@@ -530,7 +582,9 @@ export function ModuleSettings({
                 disabled={backupLoading}
                 onClick={handleBackupData}
               >
-                {backupLoading ? '备份中…' : '备份数据'}
+                {backupLoading
+                  ? t('modules.n8n.fields.backupLoading')
+                  : t('modules.n8n.fields.backupButton')}
               </Button>
               <Button
                 variant="outline"
@@ -538,14 +592,16 @@ export function ModuleSettings({
                 disabled={restoreLoading}
                 onClick={handleRestoreData}
               >
-                {restoreLoading ? '恢复中…' : '恢复备份'}
+                {restoreLoading
+                  ? t('modules.n8n.fields.restoreLoading')
+                  : t('modules.n8n.fields.restoreButton')}
               </Button>
             </div>
           </Field>
 
           <div className="flex gap-2 pt-2">
             <Button shine disabled={saving || applyingRestart} onClick={onSave}>
-              保存 n8n 设置
+              {t('modules.n8n.fields.saveButton')}
             </Button>
             {canRestart && (
               <Button
@@ -553,7 +609,9 @@ export function ModuleSettings({
                 disabled={saving || applyingRestart}
                 onClick={handleApplyAndRestart}
               >
-                {applyingRestart ? '应用中…' : '应用并重启'}
+                {applyingRestart
+                  ? t('modules.n8n.fields.applying')
+                  : t('modules.n8n.fields.applyRestartButton')}
               </Button>
             )}
           </div>
@@ -632,12 +690,12 @@ export function ModuleSettings({
           const modules = await window.api.listModules()
           const target = modules.find((m) => m.id === 'dify')
           if (target && (target.status === 'running' || target.status === 'starting')) {
-            toast.warning('Dify 模块正在运行，无法禁用。请先在首页停止服务后再尝试禁用。')
+            toast.warning(t('modules.dify.toastDisableRunningWarn'))
             updateModule({ enabled: true })
             return
           }
         } catch {
-          toast.error('检查 Dify 运行状态失败，暂时无法禁用。')
+          toast.error(t('modules.dify.toastDisableStatusError'))
           updateModule({ enabled: true })
           return
         }
@@ -661,12 +719,12 @@ export function ModuleSettings({
 
         const result = await window.api.restartDify()
         if (!result || !result.success) {
-          toast.error(result?.error ?? '应用并重启 Dify 失败，请稍后重试。')
+          toast.error(result?.error ?? t('modules.dify.toastApplyRestartFail'))
         } else {
-          toast.success('Dify 设置已应用并重启。')
+          toast.success(t('modules.dify.toastApplyRestartSuccess'))
         }
       } catch {
-        toast.error('应用并重启 Dify 失败，请稍后重试。')
+        toast.error(t('modules.dify.toastApplyRestartFail'))
       } finally {
         setApplyingRestart(false)
       }
@@ -675,35 +733,47 @@ export function ModuleSettings({
     return (
       <Card className="border-none bg-transparent shadow-none">
         <CardHeader className="px-0">
-          <CardTitle>{titleMap[moduleKey]}</CardTitle>
-          <CardDescription>配置 Dify 的端口、环境变量等参数（数据库与 Redis 复用现有实例）。</CardDescription>
+          <CardTitle>{t('modules.dify.title')}</CardTitle>
+          <CardDescription>{t('modules.dify.cardDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 px-0">
-          <Field label="启用 Dify 模块" description="关闭后将不在控制台中展示和管理 Dify 模块。">
+          <Field
+            label={t('modules.dify.fields.enabledLabel')}
+            description={t('modules.dify.fields.enabledDesc')}
+          >
             <Switch checked={moduleSettings.enabled} onCheckedChange={handleEnabledChange} />
           </Field>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="服务端口" description="Dify Web 映射到本机的端口号。">
+            <Field
+              label={t('modules.dify.fields.portLabel')}
+              description={t('modules.dify.fields.portDesc')}
+            >
               <Input
-                placeholder="80"
+                placeholder={t('modules.dify.fields.portPlaceholder')}
                 className="font-mono text-xs"
                 value={moduleSettings.port ? String(moduleSettings.port) : ''}
                 onChange={(e) => handlePortChange(e.target.value)}
               />
             </Field>
-            <Field label="Dify 控制台 URL" description="基于 localhost 与端口推导，仅作为访问参考。">
+            <Field
+              label={t('modules.dify.fields.consoleLabel')}
+              description={t('modules.dify.fields.consoleDesc')}
+            >
               <div className="text-xs font-mono text-slate-700 dark:text-slate-200 break-all">
-                {consoleUrl || '请先配置服务端口'}
+                {consoleUrl || t('modules.dify.fields.consoleEmpty')}
               </div>
             </Field>
           </div>
 
-          <Field label="环境变量" description="一行一个，支持 KEY=VALUE 格式（不含数据库与 Redis 连接字段）。">
+          <Field
+            label={t('modules.dify.fields.envLabel')}
+            description={t('modules.dify.fields.envDesc')}
+          >
             <textarea
               rows={4}
               className="w-full rounded-lg border border-slate-200/80 bg-white/90 px-3 py-2 text-xs font-mono text-slate-900 shadow-sm outline-none placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-0"
-              placeholder="FILES_URL=http://localhost:5001\nVECTOR_STORE=weaviate"
+              placeholder={t('modules.dify.fields.envPlaceholder')}
               value={otherEnvText}
               onChange={(e) => handleEnvTextChange(e.target.value)}
             />
@@ -711,7 +781,7 @@ export function ModuleSettings({
 
           <div className="flex gap-2 pt-2">
             <Button shine disabled={saving || applyingRestart} onClick={onSave}>
-              保存 Dify 设置
+              {t('modules.dify.fields.saveButton')}
             </Button>
             {canRestart && (
               <Button
@@ -719,7 +789,9 @@ export function ModuleSettings({
                 disabled={saving || applyingRestart}
                 onClick={handleApplyAndRestart}
               >
-                {applyingRestart ? '应用中…' : '应用并重启'}
+                {applyingRestart
+                  ? t('modules.dify.fields.applying')
+                  : t('modules.dify.fields.applyRestartButton')}
               </Button>
             )}
           </div>
@@ -829,12 +901,12 @@ export function ModuleSettings({
           const modules = await window.api.listModules()
           const target = modules.find((m) => m.id === 'oneapi')
           if (target && (target.status === 'running' || target.status === 'starting')) {
-            toast.warning('OneAPI 模块正在运行，无法禁用。请先在首页停止服务后再尝试禁用。')
+            toast.warning(t('modules.oneapi.toastDisableRunningWarn'))
             updateModule({ enabled: true })
             return
           }
         } catch {
-          toast.error('检查 OneAPI 运行状态失败，暂时无法禁用。')
+          toast.error(t('modules.oneapi.toastDisableStatusError'))
           updateModule({ enabled: true })
           return
         }
@@ -859,15 +931,19 @@ export function ModuleSettings({
     const handleCopySecret = async (key: keyof typeof secretEnv) => {
       const value = secretEnv[key]
       if (!value) {
-        toast.error('秘钥尚未生成，请先启动 OneAPI。')
+        toast.error(t('modules.oneapi.toastSecretNotGenerated'))
         return
       }
 
       try {
         await navigator.clipboard.writeText(value)
-        toast.success(`${String(key)} 已复制到剪贴板。`)
+        toast.success(
+          t('modules.oneapi.toastCopySuccess', {
+            key: String(key),
+          }),
+        )
       } catch {
-        toast.error('复制失败，请手动复制。')
+        toast.error(t('modules.oneapi.toastCopyFail'))
       }
     }
 
@@ -880,12 +956,12 @@ export function ModuleSettings({
 
         const result = await window.api.restartOneApi()
         if (!result || !result.success) {
-          toast.error(result?.error ?? '应用并重启 OneAPI 失败，请稍后重试。')
+          toast.error(result?.error ?? t('modules.oneapi.toastApplyRestartFail'))
         } else {
-          toast.success('OneAPI 设置已应用并重启。')
+          toast.success(t('modules.oneapi.toastApplyRestartSuccess'))
         }
       } catch {
-        toast.error('应用并重启 OneAPI 失败，请稍后重试。')
+        toast.error(t('modules.oneapi.toastApplyRestartFail'))
       } finally {
         setApplyingRestart(false)
       }
@@ -897,20 +973,24 @@ export function ModuleSettings({
       try {
         const result = await window.api.backupModuleData('oneapi')
         if (!result || (result as any).cancelled) {
-          window.alert('已取消备份 OneAPI 数据。')
+          window.alert(t('modules.oneapi.backupCancelled'))
           return
         }
         if (!result.success) {
-          window.alert(result.error ?? '备份 OneAPI 数据失败，请稍后重试。')
+          window.alert(result.error ?? t('modules.oneapi.backupFailed'))
           return
         }
         if (result.path) {
-          window.alert(`OneAPI 数据已备份到：${result.path}`)
+          window.alert(
+            t('modules.oneapi.backupCompletedWithPath', {
+              path: result.path,
+            }),
+          )
         } else {
-          window.alert('OneAPI 数据备份完成。')
+          window.alert(t('modules.oneapi.backupCompleted'))
         }
       } catch {
-        window.alert('备份 OneAPI 数据失败，请稍后重试。')
+        window.alert(t('modules.oneapi.backupFailed'))
       } finally {
         setBackupLoading(false)
       }
@@ -919,7 +999,7 @@ export function ModuleSettings({
     const handleRestoreData = async () => {
       if (restoreLoading) return
       const confirmed = window.confirm(
-        '此操作会使用所选备份覆盖当前 OneAPI 数据库中的所有数据，可能导致现有数据不可恢复。确定要继续吗？',
+        t('modules.oneapi.restoreConfirm'),
       )
       if (!confirmed) return
 
@@ -927,16 +1007,16 @@ export function ModuleSettings({
       try {
         const result = await window.api.restoreModuleData('oneapi')
         if (!result || (result as any).cancelled) {
-          window.alert('已取消恢复 OneAPI 数据。')
+          window.alert(t('modules.oneapi.restoreCancelled'))
           return
         }
         if (!result.success) {
-          window.alert(result.error ?? '恢复 OneAPI 数据失败，请稍后重试。')
+          window.alert(result.error ?? t('modules.oneapi.restoreFailed'))
           return
         }
-        window.alert('OneAPI 数据恢复完成。')
+        window.alert(t('modules.oneapi.restoreCompleted'))
       } catch {
-        window.alert('恢复 OneAPI 数据失败，请稍后重试。')
+        window.alert(t('modules.oneapi.restoreFailed'))
       } finally {
         setRestoreLoading(false)
       }
@@ -945,76 +1025,94 @@ export function ModuleSettings({
     return (
       <Card className="border-none bg-transparent shadow-none">
         <CardHeader className="px-0">
-          <CardTitle>{titleMap[moduleKey]}</CardTitle>
-          <CardDescription>配置 OneAPI 的端口、日志和数据库等参数。</CardDescription>
+          <CardTitle>{t('modules.oneapi.title')}</CardTitle>
+          <CardDescription>{t('modules.oneapi.cardDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 px-0">
-          <Field label="启用 OneAPI 模块" description="关闭后将不在控制台中展示和管理 OneAPI 模块。">
+          <Field
+            label={t('modules.oneapi.fields.enabledLabel')}
+            description={t('modules.oneapi.fields.enabledDesc')}
+          >
             <Switch checked={moduleSettings.enabled} onCheckedChange={handleEnabledChange} />
           </Field>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="服务端口" description="OneAPI 容器映射到本机的端口号。">
+            <Field
+              label={t('modules.oneapi.fields.portLabel')}
+              description={t('modules.oneapi.fields.portDesc')}
+            >
               <Input
-                placeholder="3000"
+                placeholder={t('modules.oneapi.fields.portPlaceholder')}
                 className="font-mono text-xs"
                 value={moduleSettings.port ? String(moduleSettings.port) : ''}
                 onChange={(e) => handlePortChange(e.target.value)}
               />
             </Field>
-            <Field label="OneAPI API 地址" description="基于 localhost 与端口推导，仅作为访问参考。">
+            <Field
+              label={t('modules.oneapi.fields.apiLabel')}
+              description={t('modules.oneapi.fields.apiDesc')}
+            >
               <div className="text-xs font-mono text-slate-700 dark:text-slate-200 break-all">
-                {apiUrl || '请先配置服务端口'}
+                {apiUrl || t('modules.oneapi.fields.apiEmpty')}
               </div>
             </Field>
           </div>
 
-          <Field label="日志等级" description="控制是否启用 OneAPI 的调试日志（DEBUG / DEBUG_SQL）">
+          <Field
+            label={t('modules.oneapi.fields.logFieldLabel')}
+            description={t('modules.oneapi.fields.logFieldDesc')}
+          >
             <div className="flex flex-col gap-2 text-xs text-slate-600 dark:text-slate-200">
               <label className="flex items-center gap-3">
                 <Switch
                   checked={debugEnabled}
                   onCheckedChange={(checked) => handleDebugToggle('DEBUG', checked)}
                 />
-                <span>启用 DEBUG 日志（DEBUG）</span>
+                <span>{t('modules.oneapi.fields.logToggleDebug')}</span>
               </label>
               <label className="flex items-center gap-3">
                 <Switch
                   checked={debugSqlEnabled}
                   onCheckedChange={(checked) => handleDebugToggle('DEBUG_SQL', checked)}
                 />
-                <span>启用 SQL 调试日志（DEBUG_SQL）</span>
+                <span>{t('modules.oneapi.fields.logToggleSql')}</span>
               </label>
             </div>
           </Field>
 
           <Field
-            label="数据库模式（开发中）"
-            description="选择使用内置托管 MySQL + Redis 或外部数据库与 Redis。"
+            label={t('modules.oneapi.fields.dbModeLabel')}
+            description={t('modules.oneapi.fields.dbModeDesc')}
           >
             <select
               className="h-9 w-full rounded-lg border border-slate-200/80 bg-white/90 px-3 text-sm text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               value={dbMode}
               onChange={(e) => handleDbModeChange(e.target.value)}
             >
-              <option value="managed">内置托管 MySQL + Redis（推荐）</option>
-              <option value="external">外部 MySQL / Redis</option>
+              <option value="managed">{t('modules.oneapi.fields.dbModeManaged')}</option>
+              <option value="external">{t('modules.oneapi.fields.dbModeExternal')}</option>
             </select>
           </Field>
 
           {dbMode === 'external' && (
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="外部数据库 SQL_DSN" description="例如 root:123456@tcp(localhost:3306)/oneapi。">
+              <Field
+                label={t('modules.oneapi.fields.extSqlDsnLabel')}
+                description={t('modules.oneapi.fields.extSqlDsnDesc')}
+              >
                 <Input
-                  placeholder="root:123456@tcp(localhost:3306)/oneapi"
+                  placeholder={t('modules.oneapi.fields.extSqlDsnPlaceholder')}
                   className="font-mono text-xs"
                   value={envMap.SQL_DSN || ''}
                   onChange={(e) => handleExternalDbFieldChange('sqlDsn', e.target.value)}
                 />
               </Field>
-              <Field label="外部 Redis 连接串" description="例如 redis://localhost:6379。">
+              <Field
+                label={t('modules.oneapi.fields.extRedisLabel')}
+                description={t('modules.oneapi.fields.extRedisDesc')}
+              >
                 <Input
-                  placeholder="redis://localhost:6379"
+                  placeholder={t('modules.oneapi.fields.extRedisPlaceholder')}
                   className="font-mono text-xs"
                   value={envMap.REDIS_CONN_STRING || ''}
                   onChange={(e) => handleExternalDbFieldChange('redis', e.target.value)}
@@ -1023,23 +1121,29 @@ export function ModuleSettings({
             </div>
           )}
 
-          <Field label="环境变量" description="一行一个，支持 KEY=VALUE 格式（不含上方已经配置的字段）。">
+          <Field
+            label={t('modules.oneapi.fields.envLabel')}
+            description={t('modules.oneapi.fields.envDesc')}
+          >
             <textarea
               rows={4}
               className="w-full rounded-lg border border-slate-200/80 bg-white/90 px-3 py-2 text-xs font-mono text-slate-900 shadow-sm outline-none placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-0"
-              placeholder="OPENAI_API_KEY=sk-...&#10;HTTP_PROXY=http://127.0.0.1:7890"
+              placeholder={t('modules.oneapi.fields.envPlaceholder')}
               value={otherEnvText}
               onChange={(e) => handleEnvTextChange(e.target.value)}
             />
           </Field>
 
-          <Field label="安全秘钥" description="首次启动 OneAPI 时自动生成，用于会话加密等，暂不支持在此修改。">
+          <Field
+            label={t('modules.oneapi.fields.secretsLabel')}
+            description={t('modules.oneapi.fields.secretsDesc')}
+          >
             <div className="space-y-3 text-xs">
               {(
                 [
                   {
                     key: 'SESSION_SECRET' as const,
-                    label: '会话秘钥 SESSION_SECRET',
+                    label: t('modules.oneapi.fields.secretSessionLabel'),
                   },
                 ]
               ).map((item) => {
@@ -1057,7 +1161,7 @@ export function ModuleSettings({
                           ? visible
                             ? value
                             : masked
-                          : '尚未生成（启动 OneAPI 后将自动生成）'}
+                          : t('modules.oneapi.fields.secretNotGenerated')}
                       </div>
                       <Button
                         variant="outline"
@@ -1065,7 +1169,7 @@ export function ModuleSettings({
                         className="h-7 px-2 text-[11px]"
                         onClick={() => handleCopySecret(item.key)}
                       >
-                        复制
+                        {t('modules.oneapi.fields.copyButton')}
                       </Button>
                       <Button
                         variant="outline"
@@ -1073,7 +1177,9 @@ export function ModuleSettings({
                         className="h-7 px-2 text-[11px]"
                         onClick={() => setVisibleSecretKey(visible ? null : item.key)}
                       >
-                        {visible ? '隐藏' : '显示'}
+                        {visible
+                          ? t('modules.oneapi.fields.hideButton')
+                          : t('modules.oneapi.fields.showButton')}
                       </Button>
                     </div>
                   </div>
@@ -1082,8 +1188,8 @@ export function ModuleSettings({
             </div>
           </Field>
           <Field
-            label="数据备份与恢复"
-            description="备份当前 OneAPI 模块的数据库数据，或从备份文件中恢复（请在操作前确认已了解风险）。"
+            label={t('modules.oneapi.fields.backupLabel')}
+            description={t('modules.oneapi.fields.backupDesc')}
           >
             <div className="flex flex-wrap gap-2">
               <Button
@@ -1092,7 +1198,9 @@ export function ModuleSettings({
                 disabled={backupLoading}
                 onClick={handleBackupData}
               >
-                {backupLoading ? '备份中…' : '备份数据'}
+                {backupLoading
+                  ? t('modules.oneapi.fields.backupLoading')
+                  : t('modules.oneapi.fields.backupButton')}
               </Button>
               <Button
                 variant="outline"
@@ -1100,14 +1208,16 @@ export function ModuleSettings({
                 disabled={restoreLoading}
                 onClick={handleRestoreData}
               >
-                {restoreLoading ? '恢复中…' : '恢复备份'}
+                {restoreLoading
+                  ? t('modules.oneapi.fields.restoreLoading')
+                  : t('modules.oneapi.fields.restoreButton')}
               </Button>
             </div>
           </Field>
 
           <div className="flex gap-2 pt-2">
             <Button shine disabled={saving || applyingRestart} onClick={onSave}>
-              保存 OneAPI 设置
+              {t('modules.oneapi.fields.saveButton')}
             </Button>
             {canRestart && (
               <Button
@@ -1115,7 +1225,9 @@ export function ModuleSettings({
                 disabled={saving || applyingRestart}
                 onClick={handleApplyAndRestart}
               >
-                {applyingRestart ? '应用中…' : '应用并重启'}
+                {applyingRestart
+                  ? t('modules.oneapi.fields.applying')
+                  : t('modules.oneapi.fields.applyRestartButton')}
               </Button>
             )}
           </div>
@@ -1197,12 +1309,12 @@ export function ModuleSettings({
           const modules = await window.api.listModules()
           const target = modules.find((m) => m.id === 'ragflow')
           if (target && (target.status === 'running' || target.status === 'starting')) {
-            toast.warning('RagFlow 模块正在运行，无法禁用。请先在首页停止服务后再尝试禁用。')
+            toast.warning(t('modules.ragflow.toastDisableRunningWarn'))
             updateModule({ enabled: true })
             return
           }
         } catch {
-          toast.error('检查 RagFlow 运行状态失败，暂时无法禁用。')
+          toast.error(t('modules.ragflow.toastDisableStatusError'))
           updateModule({ enabled: true })
           return
         }
@@ -1235,12 +1347,12 @@ export function ModuleSettings({
 
         const result = await window.api.restartRagflow()
         if (!result || !result.success) {
-          toast.error(result?.error ?? '应用并重启 RagFlow 失败，请稍后重试。')
+          toast.error(result?.error ?? t('modules.ragflow.toastApplyRestartFail'))
         } else {
-          toast.success('RagFlow 设置已应用并重启。')
+          toast.success(t('modules.ragflow.toastApplyRestartSuccess'))
         }
       } catch {
-        toast.error('应用并重启 RagFlow 失败，请稍后重试。')
+        toast.error(t('modules.ragflow.toastApplyRestartFail'))
       } finally {
         setApplyingRestart(false)
       }
@@ -1249,36 +1361,47 @@ export function ModuleSettings({
     return (
       <Card className="border-none bg-transparent shadow-none">
         <CardHeader className="px-0">
-          <CardTitle>{titleMap[moduleKey]}</CardTitle>
-          <CardDescription>配置 RagFlow 的端口、数据库/存储与环境变量等参数。</CardDescription>
+          <CardTitle>{t('modules.ragflow.title')}</CardTitle>
+          <CardDescription>{t('modules.ragflow.cardDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 px-0">
-          <Field label="启用 RagFlow 模块" description="关闭后将不在控制台中展示和管理 RagFlow 模块。">
+          <Field
+            label={t('modules.ragflow.fields.enabledLabel')}
+            description={t('modules.ragflow.fields.enabledDesc')}
+          >
             <Switch checked={moduleSettings.enabled} onCheckedChange={handleEnabledChange} />
           </Field>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="服务端口" description="RagFlow HTTP 服务映射到本机的端口号（容器内为 80，经 nginx 反向代理到 9380）。">
+            <Field
+              label={t('modules.ragflow.fields.portLabel')}
+              description={t('modules.ragflow.fields.portDesc')}
+            >
               <Input
-                placeholder="9380"
+                placeholder={t('modules.ragflow.fields.portPlaceholder')}
                 className="font-mono text-xs"
                 value={moduleSettings.port ? String(moduleSettings.port) : ''}
                 onChange={(e) => handlePortChange(e.target.value)}
               />
             </Field>
-            <Field label="RagFlow 控制台 URL" description="基于 localhost 与端口推导，仅作为访问参考。">
+            <Field
+              label={t('modules.ragflow.fields.consoleLabel')}
+              description={t('modules.ragflow.fields.consoleDesc')}
+            >
               <div className="text-xs font-mono text-slate-700 dark:text-slate-200 break-all">
-                {moduleSettings.port ? `http://localhost:${moduleSettings.port}` : '请先配置服务端口'}
+                {moduleSettings.port
+                  ? `http://localhost:${moduleSettings.port}`
+                  : t('modules.ragflow.fields.consoleEmpty')}
               </div>
             </Field>
           </div>
 
           <Field
-            label="模型缓存目录（可选）"
-            description="留空则使用容器内部默认缓存路径。如果填写，将把该目录挂载到容器 /root/.ragflow，用于存放 HuggingFace 等模型缓存。"
+            label={t('modules.ragflow.fields.modelCacheLabel')}
+            description={t('modules.ragflow.fields.modelCacheDesc')}
           >
             <Input
-              placeholder="C:\\ragflow-cache\\.ragflow"
+              placeholder={t('modules.ragflow.fields.modelCachePlaceholder')}
               className="font-mono text-xs"
               value={moduleSettings.modelCacheDir || ''}
               onChange={(e) => updateModule({ modelCacheDir: e.target.value })}
@@ -1286,36 +1409,39 @@ export function ModuleSettings({
           </Field>
 
           <Field
-            label="数据库 / Redis / MinIO 连接（高级）"
-            description="当前默认复用内置 MySQL / Redis / MinIO，通常无需修改。若需自定义，可在下方环境变量中覆盖相关连接设置。"
+            label={t('modules.ragflow.fields.connectionsLabel')}
+            description={t('modules.ragflow.fields.connectionsDesc')}
           >
             <div className="text-[11px] text-slate-500 dark:text-slate-300 space-y-1">
-              <div>MySQL 相关：MYSQL_DBNAME / MYSQL_USER / MYSQL_PASSWORD / MYSQL_HOST / MYSQL_PORT</div>
-              <div>Redis 相关：REDIS_HOST / REDIS_PORT / REDIS_PASSWORD</div>
-              <div>MinIO 相关：MINIO_USER / MINIO_PASSWORD / MINIO_HOST</div>
+              <div>{t('modules.ragflow.fields.connectionsMysql')}</div>
+              <div>{t('modules.ragflow.fields.connectionsRedis')}</div>
+              <div>{t('modules.ragflow.fields.connectionsMinio')}</div>
             </div>
           </Field>
 
           <Field
-            label="日志与调试"
-            description="可通过 LOG_LEVELS 与 DEBUG 控制 RagFlow 内部日志行为。"
+            label={t('modules.ragflow.fields.logLabel')}
+            description={t('modules.ragflow.fields.logDesc')}
           >
             <div className="flex flex-col gap-2 text-xs text-slate-600 dark:text-slate-200">
               <label className="flex items-center gap-3">
                 <Switch checked={debugEnabled} onCheckedChange={handleDebugToggle} />
-                <span>启用调试模式（DEBUG=true）</span>
+                <span>{t('modules.ragflow.fields.logToggleDebug')}</span>
               </label>
               <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                进阶：可在下方环境变量中配置 LOG_LEVELS（例如 root=INFO,peewee=WARNING）。
+                {t('modules.ragflow.fields.logAdvancedTip')}
               </div>
             </div>
           </Field>
 
-          <Field label="环境变量" description="一行一个，支持 KEY=VALUE 格式（不含上方已经列出的保留字段）。">
+          <Field
+            label={t('modules.ragflow.fields.envLabel')}
+            description={t('modules.ragflow.fields.envDesc')}
+          >
             <textarea
               rows={4}
               className="w-full rounded-lg border border-slate-200/80 bg-white/90 px-3 py-2 text-xs font-mono text-slate-900 shadow-sm outline-none placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-0"
-              placeholder="RAGFLOW_EXTRA_OPTION=value&#10;HF_ENDPOINT=http://your-hf-mirror.example.com"
+              placeholder={t('modules.ragflow.fields.envPlaceholder')}
               value={otherEnvText}
               onChange={(e) => handleEnvTextChange(e.target.value)}
             />
@@ -1323,7 +1449,7 @@ export function ModuleSettings({
 
           <div className="flex gap-2 pt-2">
             <Button shine disabled={saving || applyingRestart} onClick={onSave}>
-              保存 RagFlow 设置
+              {t('modules.ragflow.fields.saveButton')}
             </Button>
             {canRestart && (
               <Button
@@ -1331,7 +1457,9 @@ export function ModuleSettings({
                 disabled={saving || applyingRestart}
                 onClick={handleSaveAndRestart}
               >
-                {applyingRestart ? '应用中…' : '应用并重启'}
+                {applyingRestart
+                  ? t('modules.ragflow.fields.applying')
+                  : t('modules.ragflow.fields.applyRestartButton')}
               </Button>
             )}
           </div>
@@ -1378,26 +1506,39 @@ export function ModuleSettings({
   return (
     <Card className="border-none bg-transparent shadow-none">
       <CardHeader className="px-0">
-        <CardTitle>{titleMap[moduleKey]}</CardTitle>
-        <CardDescription>配置模块的端口、数据库和环境变量等。</CardDescription>
+        <CardTitle>{t(titleMap[moduleKey])}</CardTitle>
+        <CardDescription>{t('modules.generic.cardDesc')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-0">
-        <Field label="启用模块" description="关闭后将不在控制台中展示和管理该模块。">
+        <Field
+          label={t('modules.generic.fields.enabledLabel')}
+          description={t('modules.generic.fields.enabledDesc')}
+        >
           <Switch checked={moduleSettings.enabled} onCheckedChange={handleGenericEnabledChange} />
         </Field>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="服务端口" description="容器映射到本机的端口号。">
+          <Field
+            label={t('modules.generic.fields.portLabel')}
+            description={t('modules.generic.fields.portDesc')}
+          >
             <Input
-              placeholder={moduleKey === 'ragflow' ? '9500' : '8080'}
+              placeholder={
+                moduleKey === 'ragflow'
+                  ? t('modules.generic.fields.portPlaceholderRagflow')
+                  : t('modules.generic.fields.portPlaceholderDefault')
+              }
               className="font-mono text-xs"
               value={moduleSettings.port ? String(moduleSettings.port) : ''}
               onChange={(e) => handleGenericPortChange(e.target.value)}
             />
           </Field>
-          <Field label="数据库 URL" description="可选，留空则使用模块内置存储或默认配置。">
+          <Field
+            label={t('modules.generic.fields.dbUrlLabel')}
+            description={t('modules.generic.fields.dbUrlDesc')}
+          >
             <Input
-              placeholder="postgres://user:pass@localhost:5432/dbname"
+              placeholder={t('modules.generic.fields.dbUrlPlaceholder')}
               className="font-mono text-xs"
               value={moduleSettings.databaseUrl || ''}
               onChange={(e) => handleGenericDatabaseUrlChange(e.target.value)}
@@ -1405,11 +1546,14 @@ export function ModuleSettings({
           </Field>
         </div>
 
-        <Field label="环境变量" description="一行一个，支持 KEY=VALUE 格式。">
+        <Field
+          label={t('modules.generic.fields.envLabel')}
+          description={t('modules.generic.fields.envDesc')}
+        >
           <textarea
             rows={4}
             className="w-full rounded-lg border border-slate-200/80 bg-white/90 px-3 py-2 text-xs font-mono text-slate-900 shadow-sm outline-none placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-0"
-            placeholder="OPENAI_API_KEY=sk-...&#10;HTTP_PROXY=http://127.0.0.1:7890"
+            placeholder={t('modules.generic.fields.envPlaceholder')}
             value={genericEnvText}
             onChange={(e) => handleGenericEnvChange(e.target.value)}
           />
@@ -1417,11 +1561,11 @@ export function ModuleSettings({
 
         <div className="flex gap-2 pt-2">
           <Button shine disabled={saving} onClick={onSave}>
-            保存模块设置
+            {t('modules.generic.fields.saveButton')}
           </Button>
           {canRestart && (
             <Button variant="outline" disabled>
-              应用并重启
+              {t('modules.generic.fields.applyRestartButton')}
             </Button>
           )}
         </div>

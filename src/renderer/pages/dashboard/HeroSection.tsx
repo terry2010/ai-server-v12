@@ -3,6 +3,7 @@ import { Activity, ArrowRight, ChevronLeft, ChevronRight, Clock, Cpu } from 'luc
 import { GlassCard } from '@/components/GlassCard'
 import { Button } from '@/components/ui/button'
 import { StatusDot } from '@/components/StatusDot'
+import { useTranslation } from 'react-i18next'
 
 interface HeroSectionProps {
   runningCount: number
@@ -10,38 +11,23 @@ interface HeroSectionProps {
 }
 
 interface HeroSlide {
-  id: string
-  title: string
-  description: string
-  pillLabel: string
-  actionLabel: string
+  id: 'overview' | 'workflow' | 'market'
 }
 
 const heroSlides: HeroSlide[] = [
   {
     id: 'overview',
-    title: '欢迎使用 AI-Server 管理平台',
-    description: '统一管理 n8n / Dify / OneAPI / RagFlow 等多种 AI 服务，一键查看运行状态、性能与日志。',
-    pillLabel: '本地 Docker 正在运行',
-    actionLabel: '快速开始',
   },
   {
     id: 'workflow',
-    title: '一键启用常用自动化工作流',
-    description: '使用 n8n 模板快速编排通知、报表、监控等自动化流程。',
-    pillLabel: '推荐 · 工作流模板',
-    actionLabel: '查看示例工作流',
   },
   {
     id: 'market',
-    title: '安装开箱即用的 AI 应用',
-    description: '从客服助手、文档问答到工作流模板，几分钟搭建你的 AI 场景。',
-    pillLabel: '推荐 · AI 市场',
-    actionLabel: '前往 AI 市场',
   },
 ]
 
 export function HeroSection({ runningCount, totalServices }: HeroSectionProps) {
+  const { t } = useTranslation('dashboard')
   const [activeHeroIndex, setActiveHeroIndex] = useState(0)
 
   useEffect(() => {
@@ -79,13 +65,21 @@ export function HeroSection({ runningCount, totalServices }: HeroSectionProps) {
                   <div className="mb-1 inline-flex items-center gap-2 rounded-full bg-sky-100 px-2 py-[3px] text-[11px] font-medium text-sky-700">
                     <StatusDot status="running" />
                     <span className="uppercase tracking-wide text-sky-700">AI-Server</span>
-                    <span className="text-slate-500">本地开发环境</span>
+                    <span className="text-slate-500">{t('hero.envPill')}</span>
                   </div>
                   <h1 className="mt-1 text-2xl font-semibold tracking-tight text-sky-900 md:text-3xl dark:text-slate-50">
-                    {slide.title}
+                    {slide.id === 'overview'
+                      ? t('hero.title')
+                      : slide.id === 'workflow'
+                      ? t('hero.slides.workflowTitle')
+                      : t('hero.slides.marketTitle')}
                   </h1>
                   <p className="mt-1 text-xs text-slate-600 md:text-sm dark:text-slate-200/90">
-                    {slide.description}
+                    {slide.id === 'overview'
+                      ? t('hero.description')
+                      : slide.id === 'workflow'
+                      ? t('hero.slides.workflowDesc')
+                      : t('hero.slides.marketDesc')}
                   </p>
 
                   <dl className="mt-3 grid grid-cols-3 gap-3 text-[11px] text-slate-700 md:text-xs dark:text-slate-100">
@@ -94,7 +88,7 @@ export function HeroSection({ runningCount, totalServices }: HeroSectionProps) {
                         <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-sky-100 text-sky-700">
                           <Cpu className="h-3 w-3" />
                         </span>
-                        运行服务
+                        {t('hero.metrics.running')}
                       </dt>
                       <dd className="text-sm font-semibold text-sky-900 dark:text-slate-50">
                         {runningCount} / {totalServices}
@@ -105,10 +99,12 @@ export function HeroSection({ runningCount, totalServices }: HeroSectionProps) {
                         <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-sky-100 text-sky-700">
                           <Activity className="h-3 w-3" />
                         </span>
-                        系统状态
+                        {t('hero.metrics.status')}
                       </dt>
                       <dd className="text-sm font-semibold text-emerald-600 dark:text-emerald-200">
-                        {runningCount === totalServices ? '正常' : '有异常服务'}
+                        {runningCount === totalServices
+                          ? t('hero.metrics.statusOk')
+                          : t('hero.metrics.statusIssue')}
                       </dd>
                     </div>
                     <div className="space-y-0.5">
@@ -116,9 +112,11 @@ export function HeroSection({ runningCount, totalServices }: HeroSectionProps) {
                         <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-sky-100 text-sky-700">
                           <Clock className="h-3 w-3" />
                         </span>
-                        已运行时间
+                        {t('hero.metrics.uptime')}
                       </dt>
-                      <dd className="text-sm font-semibold text-sky-900 dark:text-slate-50">2 小时 15 分钟</dd>
+                      <dd className="text-sm font-semibold text-sky-900 dark:text-slate-50">
+                        {t('hero.metrics.uptimeDemo')}
+                      </dd>
                     </div>
                   </dl>
                 </div>
@@ -126,10 +124,20 @@ export function HeroSection({ runningCount, totalServices }: HeroSectionProps) {
                 <div className="flex flex-col items-end gap-2 text-right text-[11px] text-slate-600 md:text-xs dark:text-slate-200">
                   <div className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
-                    <span>{slide.pillLabel}</span>
+                    <span>
+                      {slide.id === 'overview'
+                        ? t('hero.pill')
+                        : slide.id === 'workflow'
+                        ? t('hero.slides.workflowPill')
+                        : t('hero.slides.marketPill')}
+                    </span>
                   </div>
                   <Button size="sm" shine className="bg-gradient-to-r from-sky-500 to-sky-400 text-white shadow-glass dark:from-sky-400 dark:to-sky-300 dark:text-slate-900 dark:shadow-md">
-                    {slide.actionLabel}
+                    {slide.id === 'overview'
+                      ? t('hero.action')
+                      : slide.id === 'workflow'
+                      ? t('hero.slides.workflowAction')
+                      : t('hero.slides.marketAction')}
                     <ArrowRight className="ml-1 h-3 w-3" />
                   </Button>
                 </div>
@@ -142,7 +150,7 @@ export function HeroSection({ runningCount, totalServices }: HeroSectionProps) {
           type="button"
           onClick={handlePrevHero}
           className="absolute left-2 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-full bg-slate-900/55 p-1.5 text-slate-100 shadow-lg backdrop-blur-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-          aria-label="上一张"
+          aria-label={t('hero.carousel.prev')}
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -150,7 +158,7 @@ export function HeroSection({ runningCount, totalServices }: HeroSectionProps) {
           type="button"
           onClick={handleNextHero}
           className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-full bg-slate-900/55 p-1.5 text-slate-100 shadow-lg backdrop-blur-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-          aria-label="下一张"
+          aria-label={t('hero.carousel.next')}
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -165,7 +173,13 @@ export function HeroSection({ runningCount, totalServices }: HeroSectionProps) {
             className={`h-1.5 rounded-full transition-colors ${
               index === activeHeroIndex ? 'w-5 bg-sky-500' : 'w-3 bg-sky-200 hover:bg-sky-300'
             }`}
-            aria-label={slide.title}
+            aria-label={
+              slide.id === 'overview'
+                ? t('hero.slides.overview')
+                : slide.id === 'workflow'
+                ? t('hero.slides.workflowTitle')
+                : t('hero.slides.marketTitle')
+            }
           />
         ))}
       </div>

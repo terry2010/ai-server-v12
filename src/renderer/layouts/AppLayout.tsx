@@ -20,6 +20,7 @@ import { GlassCard } from '@/components/GlassCard'
 import { StatusDot, type ServiceStatus } from '@/components/StatusDot'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/hooks/useTheme'
+import { useTranslation } from 'react-i18next'
 
 type ModuleLikeId = 'browser-agent' | 'n8n' | 'dify' | 'oneapi' | 'ragflow'
 
@@ -67,6 +68,7 @@ export function AppLayout() {
       }
     | null
   >(null)
+  const { t } = useTranslation('common')
   const [recentlyStartedModules, setRecentlyStartedModules] = useState<
     Record<'n8n' | 'dify' | 'oneapi' | 'ragflow', number>
   >({
@@ -128,7 +130,7 @@ export function AppLayout() {
   }
 
   const getModuleLikeLabel = (id: ModuleLikeId) => {
-    if (id === 'browser-agent') return 'AI 浏览器'
+    if (id === 'browser-agent') return t('nav.browserAgent')
     return getModuleLabel(id as 'n8n' | 'dify' | 'oneapi' | 'ragflow')
   }
 
@@ -603,7 +605,7 @@ export function AppLayout() {
               onClick={() => setMobileOpen((v) => !v)}
             >
               <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-primary/80 text-xs font-bold">AI</span>
-              <span>菜单</span>
+              <span>{t('misc.menu')}</span>
             </button>
 
             <div className="hidden items-center gap-2 lg:flex">
@@ -612,7 +614,7 @@ export function AppLayout() {
               </div>
               <div className="leading-tight">
                 <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">{systemName || 'AI-Server'}</div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">AI 服务管理平台</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">{t('misc.productSubtitle')}</div>
               </div>
             </div>
 
@@ -641,7 +643,7 @@ export function AppLayout() {
                         : 'text-slate-600/80 hover:bg-white/40 hover:text-slate-900 dark:text-slate-300/80 dark:hover:bg-slate-800/70 dark:hover:text-slate-50',
                     )}
                   >
-                    <span>首页</span>
+                    <span>{t('nav.home')}</span>
                   </NavLink>
                   {(() => {
                     if (!isModuleLikeRoute) {
@@ -845,7 +847,7 @@ export function AppLayout() {
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="切换主题"
+                aria-label={t('theme.toggle')}
                 onClick={toggleTheme}
               >
                 {theme === 'dark' ? (
@@ -883,19 +885,21 @@ export function AppLayout() {
               <GlassCard className="flex h-full flex-col rounded-2xl p-3 text-sm text-slate-800 dark:text-slate-200">
                 <div className="mb-2 flex items-center justify-between px-2">
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">导航</div>
-                    <div className="text-[11px] text-slate-500">{(systemName || 'AI-Server') + ' 控制中心'}</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('misc.sidebarTitle')}</div>
+                    <div className="text-[11px] text-slate-500">
+                      {t('misc.sidebarSubtitle', { systemName: systemName || 'AI-Server' })}
+                    </div>
                   </div>
                   <StatusDot status="running" />
                 </div>
                 <nav className="mt-3 text-xs">
                   <div className="flex flex-col gap-1 rounded-2xl border border-white/15 bg-white/5 p-1 font-medium shadow-sm shadow-black/10 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/40 dark:text-slate-200">
-                    <SideNavItem icon={LayoutDashboard} label="仪表盘" to="/" activePaths={['/']} />
-                    <SideNavItem icon={BookOpenText} label="在线教程" to="/tutorial" />
-                    <SideNavItem icon={Store} label="AI 市场" to="/market" />
-                    <SideNavItem icon={Settings2} label="系统设置" to="/settings" />
-                    <SideNavItem icon={TerminalSquare} label="系统日志" to="/logs" />
-                    <SideNavItem icon={Activity} label="性能监控" to="/monitoring" />
+                    <SideNavItem icon={LayoutDashboard} label={t('nav.dashboard')} to="/" activePaths={['/']} />
+                    <SideNavItem icon={BookOpenText} label={t('nav.tutorial')} to="/tutorial" />
+                    <SideNavItem icon={Store} label={t('nav.market')} to="/market" />
+                    <SideNavItem icon={Settings2} label={t('nav.settings')} to="/settings" />
+                    <SideNavItem icon={TerminalSquare} label={t('nav.logs')} to="/logs" />
+                    <SideNavItem icon={Activity} label={t('nav.monitoring')} to="/monitoring" />
                   </div>
                 </nav>
               </GlassCard>
@@ -907,12 +911,12 @@ export function AppLayout() {
               <div className="pointer-events-auto flex w-64 flex-col bg-white/95 px-3 pb-4 pt-20 text-slate-800 shadow-xl shadow-black/40 dark:bg-slate-900/95 dark:text-slate-200">
                 <nav className="text-sm text-slate-800 dark:text-slate-200">
                   <div className="mt-2 flex flex-col gap-1 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-1 font-medium shadow-sm shadow-black/10 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/40">
-                    <SideNavItem icon={LayoutDashboard} label="仪表盘" to="/" onClick={() => setMobileOpen(false)} />
-                    <SideNavItem icon={BookOpenText} label="在线教程" to="/tutorial" onClick={() => setMobileOpen(false)} />
-                    <SideNavItem icon={Store} label="AI 市场" to="/market" onClick={() => setMobileOpen(false)} />
-                    <SideNavItem icon={Settings2} label="系统设置" to="/settings" onClick={() => setMobileOpen(false)} />
-                    <SideNavItem icon={TerminalSquare} label="系统日志" to="/logs" onClick={() => setMobileOpen(false)} />
-                    <SideNavItem icon={Activity} label="性能监控" to="/monitoring" onClick={() => setMobileOpen(false)} />
+                    <SideNavItem icon={LayoutDashboard} label={t('nav.dashboard')} to="/" onClick={() => setMobileOpen(false)} />
+                    <SideNavItem icon={BookOpenText} label={t('nav.tutorial')} to="/tutorial" onClick={() => setMobileOpen(false)} />
+                    <SideNavItem icon={Store} label={t('nav.market')} to="/market" onClick={() => setMobileOpen(false)} />
+                    <SideNavItem icon={Settings2} label={t('nav.settings')} to="/settings" onClick={() => setMobileOpen(false)} />
+                    <SideNavItem icon={TerminalSquare} label={t('nav.logs')} to="/logs" onClick={() => setMobileOpen(false)} />
+                    <SideNavItem icon={Activity} label={t('nav.monitoring')} to="/monitoring" onClick={() => setMobileOpen(false)} />
                   </div>
                 </nav>
               </div>

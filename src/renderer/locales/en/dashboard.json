@@ -1,0 +1,103 @@
+{
+  "hero": {
+    "title": "Welcome to AI-Server Control Center",
+    "description": "Manage n8n / Dify / OneAPI / RagFlow and more in one place. Check status, performance, and logs easily.",
+    "pill": "Local Docker is running",
+    "envPill": "Local dev environment",
+    "action": "Get started",
+    "slides": {
+      "overview": "Overview",
+      "workflowTitle": "One-click automation workflows",
+      "workflowDesc": "Use n8n templates to build notification, reporting, and monitoring flows quickly.",
+      "workflowPill": "Featured · Workflow templates",
+      "workflowAction": "See sample workflows",
+      "marketTitle": "Install ready-to-use AI apps",
+      "marketDesc": "From support assistants to doc Q&A, set up your AI scenario in minutes.",
+      "marketPill": "Featured · AI Market",
+      "marketAction": "Go to AI Market"
+    },
+    "metrics": {
+      "running": "Running services",
+      "status": "System status",
+      "uptime": "Uptime",
+      "uptimeDemo": "2 hours 15 minutes",
+      "statusOk": "Healthy",
+      "statusIssue": "Needs attention"
+    },
+    "carousel": {
+      "prev": "Previous slide",
+      "next": "Next slide"
+    }
+  },
+  "service": {
+    "uptime": {
+      "running": "Running",
+      "starting": "Starting…",
+      "stopping": "Stopping…"
+    },
+    "labels": {
+      "uptime": "Uptime",
+      "port": "Port",
+      "cpu": "CPU",
+      "memory": "Memory"
+    },
+    "buttons": {
+      "start": "Start",
+      "stop": "Stop",
+      "starting": "Starting…",
+      "stopping": "Stopping…",
+      "viewLogs": "View logs"
+    }
+  },
+  "modules": {
+    "n8n": {
+      "description": "Workflow automation and orchestration engine"
+    },
+    "dify": {
+      "description": "AI application and workflow development platform"
+    },
+    "oneapi": {
+      "description": "Unified AI API gateway and quota management"
+    },
+    "ragflow": {
+      "description": "RAG knowledge base QA and document retrieval system"
+    }
+  },
+  "docker": {
+    "title": "Docker",
+    "statusRunning": "Docker is running. You can manage and monitor containers.",
+    "statusStarting": "Docker is starting, please wait…",
+    "statusStoppedCanStart": "Docker is not running. You can try to start Docker Desktop from the right button.",
+    "statusNotInstalled": "Docker does not seem to be installed. Please install Docker Desktop first.",
+    "running": "Running",
+    "stopped": "Stopped",
+    "overviewRunningServices": "Running services",
+    "overviewUptime": "Uptime",
+    "overviewNetwork": "Network",
+    "overviewNetworkValue": "bridge",
+    "refresh": "Refresh status",
+    "startAll": "Start all services",
+    "startingDocker": "Starting Docker…",
+    "startDocker": "Start Docker",
+    "installDocker": "Install Docker"
+  },
+  "errors": {
+    "stopModuleFailed": "Failed to stop module. Please check Docker.",
+    "startModuleFailed": "Failed to start module. Please check Docker.",
+    "dockerStartFailed": "Failed to start Docker service. Please start Docker Desktop manually.",
+    "dockerNotInstalled": "Docker does not seem to be installed correctly. Please install Docker Desktop first.",
+    "dockerTimeout": "Docker startup timed out. Please verify Docker Desktop status.",
+    "dockerStatusCheckFailed": "Failed to check Docker status. Please verify Docker Desktop is running."
+  },
+  "browserAgent": {
+    "title": "AI Browser · Browser Agent",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "port": "Port",
+    "sessions": "Sessions",
+    "cpu": "CPU",
+    "memory": "Memory",
+    "open": "Open",
+    "description": "Review Browser Agent sessions and screenshots collected locally (read-only)."
+  }
+}

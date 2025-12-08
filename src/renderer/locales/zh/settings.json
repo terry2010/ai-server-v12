@@ -1,0 +1,379 @@
+{
+  "title": "设置中心",
+  "subtitle": "系统与模块配置",
+  "tabs": {
+    "system": "系统设置",
+    "network": "网络设置",
+    "agent": "AI浏览器设置",
+    "n8n": "n8n 设置",
+    "dify": "Dify 设置",
+    "oneapi": "OneAPI 设置",
+    "ragflow": "RagFlow 设置",
+    "debug": "调试设置"
+  },
+  "system": {
+    "cardTitle": "系统设置",
+    "cardDesc": "配置平台基础信息与运行策略。",
+    "systemName": "系统名称",
+    "systemNameDesc": "显示在顶部栏和侧边栏的产品名称。",
+    "systemNamePlaceholder": "AI-Server 管理平台",
+    "language": "界面语言",
+    "languageDesc": "切换平台显示语言（部分文案将在后续版本支持多语言）。",
+    "languageOptions": {
+      "auto": "跟随系统（推荐）",
+      "zh": "简体中文",
+      "en": "English"
+    },
+    "logLevel": "日志等级",
+    "logLevelDesc": "控制系统输出的日志详细程度。",
+    "autoStart": "自动启动",
+    "autoStartDesc": "系统启动时自动拉起核心容器。",
+    "save": "保存设置",
+    "reset": "重置为默认"
+  },
+  "agent": {
+    "cardTitle": "AI浏览器设置",
+    "cardDesc": "配置用于 n8n 等调用的本地 Browser Agent HTTP 服务。当前仅监听 127.0.0.1，建议为生产环境设置强随机 token。",
+    "loadingTitle": "Agent 设置",
+    "loadingDesc": "正在加载配置…",
+    "enable": {
+      "label": "启用 Browser Agent",
+      "desc": "开启后，在 127.0.0.1 上启动本地 Browser Agent HTTP 服务。"
+    },
+    "port": {
+      "label": "服务端口",
+      "desc": "Browser Agent HTTP 服务监听的本地端口，仅支持 1024-65535 范围。",
+      "placeholder": "26080"
+    },
+    "example": {
+      "label": "示例调用地址",
+      "desc": "用于在 n8n HTTP 节点等处参考配置 Browser Agent 地址。"
+    },
+    "token": {
+      "label": "访问 Token",
+      "desc": "可选。设置后，所有 HTTP 请求需要在 Header 中携带 X-Browser-Agent-Token 或 Authorization: Bearer <token>。留空则不校验。",
+      "placeholder": "建议设置为一段足够随机的字符串，例如 32-64 位令牌。"
+    },
+    "dataRoot": {
+      "label": "数据/日志目录（可选）",
+      "desc": "用于存放 Browser Agent 的文本日志、NDJSON 元数据以及截图/下载文件等。留空则使用应用默认 data 目录。",
+      "placeholder": "例如：C:\\ai-server-data\\browser-agent"
+    },
+    "footerTip": "端口修改后，当前版本建议重启应用以确保 Browser Agent 按新端口监听。",
+    "saveButton": {
+      "idle": "保存 Agent 设置",
+      "saving": "保存中…"
+    }
+  },
+  "network": {
+    "cardTitle": "网络设置",
+    "cardDesc": "配置镜像源、代理和网络访问策略。",
+    "loadingTitle": "网络设置",
+    "loadingDesc": "正在加载配置…",
+    "mirrors": {
+      "label": "镜像加速地址",
+      "desc": "为 Docker 配置多个镜像加速源。",
+      "primaryPlaceholder": "https://registry.docker-cn.com",
+      "secondaryPlaceholder": "https://hub-mirror.example.com",
+      "add": "添加一行"
+    },
+    "proxyMode": {
+      "label": "代理模式",
+      "desc": "在受限网络环境下通过代理访问外部服务。",
+      "options": {
+        "direct": "直连",
+        "system": "系统代理",
+        "manual": "手动配置"
+      }
+    },
+    "proxyHost": {
+      "label": "代理主机",
+      "desc": "当选择手动代理时生效。",
+      "placeholder": "127.0.0.1"
+    },
+    "proxyPort": {
+      "label": "代理端口",
+      "desc": "例如 7890 或 1080。",
+      "placeholder": "7890"
+    },
+    "buttons": {
+      "save": "保存网络设置",
+      "test": "测试连接"
+    },
+    "test": {
+      "success": "测试连接成功，可以通过当前代理正常拉取镜像。",
+      "fail": "测试连接失败，请检查 Docker 与代理配置。"
+    }
+  },
+  "modules": {
+    "n8n": {
+      "title": "n8n 设置",
+      "cardDesc": "配置 n8n 的端口、数据库和环境变量等参数。",
+      "loadingDesc": "正在加载配置…",
+      "toastDisableRunningWarn": "n8n 模块正在运行，无法禁用。请先在首页停止服务后再尝试禁用。",
+      "toastDisableStatusError": "检查 n8n 运行状态失败，暂时无法禁用。",
+      "toastSecretNotGenerated": "秘钥尚未生成，请先启动 n8n。",
+      "toastCopySuccess": "{{key}} 已复制到剪贴板。",
+      "toastCopyFail": "复制失败，请手动复制。",
+      "toastApplyRestartFail": "应用并重启 n8n 失败，请稍后重试。",
+      "toastApplyRestartSuccess": "n8n 设置已应用并重启。",
+      "backupCancelled": "已取消备份 n8n 数据。",
+      "backupFailed": "备份 n8n 数据失败，请稍后重试。",
+      "backupCompletedWithPath": "n8n 数据已备份到：{{path}}",
+      "backupCompleted": "n8n 数据备份完成。",
+      "restoreConfirm": "此操作会使用所选备份覆盖当前 n8n 数据库中的所有数据，可能导致现有数据不可恢复。确定要继续吗？",
+      "restoreCancelled": "已取消恢复 n8n 数据。",
+      "restoreFailed": "恢复 n8n 数据失败，请稍后重试。",
+      "restoreCompleted": "n8n 数据恢复完成。",
+      "fields": {
+        "enabledLabel": "启用 n8n 模块",
+        "enabledDesc": "关闭后将不在控制台中展示和管理 n8n 模块。",
+        "portLabel": "服务端口",
+        "portDesc": "n8n 容器映射到本机的端口号。",
+        "portPlaceholder": "5678",
+        "consoleLabel": "n8n 控制台 URL",
+        "consoleDesc": "基于 localhost 与端口推导，仅作为访问参考。",
+        "consoleEmpty": "请先配置服务端口",
+        "webhookLabel": "Webhook 外网地址",
+        "webhookDesc": "n8n 生成 Webhook 时可参考的访问地址。",
+        "webhookEmpty": "请先配置服务端口",
+        "logLevelLabel": "n8n 日志等级",
+        "logLevelDesc": "仅影响 n8n 应用自身的日志输出级别。",
+        "dbModeLabel": "数据库模式（开发中）",
+        "dbModeDesc": "选择使用内置托管 Postgres 或外部 PostgreSQL 数据库。",
+        "dbModeManaged": "内置托管 Postgres",
+        "dbModeExternal": "外部 PostgreSQL",
+        "extHostLabel": "外部数据库主机",
+        "extHostDesc": "外部 PostgreSQL 服务地址。",
+        "extHostPlaceholder": "localhost",
+        "extPortLabel": "外部数据库端口",
+        "extPortDesc": "通常为 5432。",
+        "extPortPlaceholder": "5432",
+        "extDbNameLabel": "数据库名称",
+        "extDbNameDesc": "n8n 使用的数据库名称。",
+        "extDbNamePlaceholder": "n8n",
+        "extUserLabel": "数据库用户",
+        "extUserDesc": "用于连接外部数据库的用户名。",
+        "extUserPlaceholder": "n8n",
+        "extPasswordLabel": "数据库密码",
+        "extPasswordDesc": "用于连接外部数据库的密码。",
+        "extPasswordPlaceholder": "••••••••",
+        "envLabel": "环境变量",
+        "envDesc": "一行一个，支持 KEY=VALUE 格式（不含上方已经配置的字段）",
+        "envPlaceholder": "OPENAI_API_KEY=sk-...\nHTTP_PROXY=http://127.0.0.1:7890",
+        "secretsLabel": "安全秘钥",
+        "secretsDesc": "首次启动 n8n 时自动生成，用于加密凭据等，暂不支持在此修改。",
+        "secretEncryptionLabel": "凭据加密秘钥 N8N_ENCRYPTION_KEY",
+        "secretJwtLabel": "JWT 秘钥 N8N_JWT_SECRET",
+        "secretUserJwtLabel": "用户管理 JWT 秘钥 N8N_USER_MANAGEMENT_JWT_SECRET",
+        "secretNotGenerated": "尚未生成（启动 n8n 后将自动生成）",
+        "copyButton": "复制",
+        "hideButton": "隐藏",
+        "showButton": "显示",
+        "backupLabel": "数据备份与恢复",
+        "backupDesc": "备份当前 n8n 模块的数据库数据，或从备份文件中恢复（请在操作前确认已了解风险）。",
+        "backupLoading": "备份中…",
+        "backupButton": "备份数据",
+        "restoreLoading": "恢复中…",
+        "restoreButton": "恢复备份",
+        "saveButton": "保存 n8n 设置",
+        "applying": "应用中…",
+        "applyRestartButton": "应用并重启"
+      }
+    },
+    "dify": {
+      "title": "Dify 设置",
+      "cardDesc": "配置 Dify 的端口、环境变量等参数（数据库与 Redis 复用现有实例）。",
+      "loadingDesc": "正在加载配置…",
+      "toastDisableRunningWarn": "Dify 模块正在运行，无法禁用。请先在首页停止服务后再尝试禁用。",
+      "toastDisableStatusError": "检查 Dify 运行状态失败，暂时无法禁用。",
+      "toastApplyRestartFail": "应用并重启 Dify 失败，请稍后重试。",
+      "toastApplyRestartSuccess": "Dify 设置已应用并重启。",
+      "fields": {
+        "enabledLabel": "启用 Dify 模块",
+        "enabledDesc": "关闭后将不在控制台中展示和管理 Dify 模块。",
+        "portLabel": "服务端口",
+        "portDesc": "Dify Web 映射到本机的端口号。",
+        "portPlaceholder": "80",
+        "consoleLabel": "Dify 控制台 URL",
+        "consoleDesc": "基于 localhost 与端口推导，仅作为访问参考。",
+        "consoleEmpty": "请先配置服务端口",
+        "envLabel": "环境变量",
+        "envDesc": "一行一个，支持 KEY=VALUE 格式（不含数据库与 Redis 连接字段）。",
+        "envPlaceholder": "FILES_URL=http://localhost:5001\nVECTOR_STORE=weaviate",
+        "saveButton": "保存 Dify 设置",
+        "applying": "应用中…",
+        "applyRestartButton": "应用并重启"
+      }
+    },
+    "oneapi": {
+      "title": "OneAPI 设置",
+      "cardDesc": "配置 OneAPI 的端口、日志和数据库等参数。",
+      "loadingDesc": "正在加载配置…",
+      "toastDisableRunningWarn": "OneAPI 模块正在运行，无法禁用。请先在首页停止服务后再尝试禁用。",
+      "toastDisableStatusError": "检查 OneAPI 运行状态失败，暂时无法禁用。",
+      "toastSecretNotGenerated": "秘钥尚未生成，请先启动 OneAPI。",
+      "toastCopySuccess": "{{key}} 已复制到剪贴板。",
+      "toastCopyFail": "复制失败，请手动复制。",
+      "toastApplyRestartFail": "应用并重启 OneAPI 失败，请稍后重试。",
+      "toastApplyRestartSuccess": "OneAPI 设置已应用并重启。",
+      "backupCancelled": "已取消备份 OneAPI 数据。",
+      "backupFailed": "备份 OneAPI 数据失败，请稍后重试。",
+      "backupCompletedWithPath": "OneAPI 数据已备份到：{{path}}",
+      "backupCompleted": "OneAPI 数据备份完成。",
+      "restoreConfirm": "此操作会使用所选备份覆盖当前 OneAPI 数据库中的所有数据，可能导致现有数据不可恢复。确定要继续吗？",
+      "restoreCancelled": "已取消恢复 OneAPI 数据。",
+      "restoreFailed": "恢复 OneAPI 数据失败，请稍后重试。",
+      "restoreCompleted": "OneAPI 数据恢复完成。",
+      "fields": {
+        "enabledLabel": "启用 OneAPI 模块",
+        "enabledDesc": "关闭后将不在控制台中展示和管理 OneAPI 模块。",
+        "portLabel": "服务端口",
+        "portDesc": "OneAPI 容器映射到本机的端口号。",
+        "portPlaceholder": "3000",
+        "apiLabel": "OneAPI API 地址",
+        "apiDesc": "基于 localhost 与端口推导，仅作为访问参考。",
+        "apiEmpty": "请先配置服务端口",
+        "logFieldLabel": "日志等级",
+        "logFieldDesc": "控制是否启用 OneAPI 的调试日志（DEBUG / DEBUG_SQL）。",
+        "logToggleDebug": "启用 DEBUG 日志（DEBUG）",
+        "logToggleSql": "启用 SQL 调试日志（DEBUG_SQL）",
+        "dbModeLabel": "数据库模式（开发中）",
+        "dbModeDesc": "选择使用内置托管 MySQL + Redis 或外部数据库与 Redis。",
+        "dbModeManaged": "内置托管 MySQL + Redis（推荐）",
+        "dbModeExternal": "外部 MySQL / Redis",
+        "extSqlDsnLabel": "外部数据库 SQL_DSN",
+        "extSqlDsnDesc": "例如 root:123456@tcp(localhost:3306)/oneapi。",
+        "extSqlDsnPlaceholder": "root:123456@tcp(localhost:3306)/oneapi",
+        "extRedisLabel": "外部 Redis 连接串",
+        "extRedisDesc": "例如 redis://localhost:6379。",
+        "extRedisPlaceholder": "redis://localhost:6379",
+        "envLabel": "环境变量",
+        "envDesc": "一行一个，支持 KEY=VALUE 格式（不含上方已经配置的字段）。",
+        "envPlaceholder": "OPENAI_API_KEY=sk-...\nHTTP_PROXY=http://127.0.0.1:7890",
+        "secretsLabel": "安全秘钥",
+        "secretsDesc": "首次启动 OneAPI 时自动生成，用于会话加密等，暂不支持在此修改。",
+        "secretSessionLabel": "会话秘钥 SESSION_SECRET",
+        "secretNotGenerated": "尚未生成（启动 OneAPI 后将自动生成）",
+        "copyButton": "复制",
+        "hideButton": "隐藏",
+        "showButton": "显示",
+        "backupLabel": "数据备份与恢复",
+        "backupDesc": "备份当前 OneAPI 模块的数据库数据，或从备份文件中恢复（请在操作前确认已了解风险）。",
+        "backupLoading": "备份中…",
+        "backupButton": "备份数据",
+        "restoreLoading": "恢复中…",
+        "restoreButton": "恢复备份",
+        "saveButton": "保存 OneAPI 设置",
+        "applying": "应用中…",
+        "applyRestartButton": "应用并重启"
+      }
+    },
+    "ragflow": {
+      "title": "RagFlow 设置",
+      "cardDesc": "配置 RagFlow 的端口、数据库/存储与环境变量等参数。",
+      "loadingDesc": "正在加载配置…",
+      "toastDisableRunningWarn": "RagFlow 模块正在运行，无法禁用。请先在首页停止服务后再尝试禁用。",
+      "toastDisableStatusError": "检查 RagFlow 运行状态失败，暂时无法禁用。",
+      "toastApplyRestartFail": "应用并重启 RagFlow 失败，请稍后重试。",
+      "toastApplyRestartSuccess": "RagFlow 设置已应用并重启。",
+      "fields": {
+        "enabledLabel": "启用 RagFlow 模块",
+        "enabledDesc": "关闭后将不在控制台中展示和管理 RagFlow 模块。",
+        "portLabel": "服务端口",
+        "portDesc": "RagFlow HTTP 服务映射到本机的端口号（容器内为 80，经 nginx 反向代理到 9380）。",
+        "portPlaceholder": "9380",
+        "consoleLabel": "RagFlow 控制台 URL",
+        "consoleDesc": "基于 localhost 与端口推导，仅作为访问参考。",
+        "consoleEmpty": "请先配置服务端口",
+        "modelCacheLabel": "模型缓存目录（可选）",
+        "modelCacheDesc": "留空则使用容器内部默认缓存路径。如果填写，将把该目录挂载到容器 /root/.ragflow，用于存放 HuggingFace 等模型缓存。",
+        "modelCachePlaceholder": "C:\\ragflow-cache\\.ragflow",
+        "connectionsLabel": "数据库 / Redis / MinIO 连接（高级）",
+        "connectionsDesc": "当前默认复用内置 MySQL / Redis / MinIO，通常无需修改。若需自定义，可在下方环境变量中覆盖相关连接设置。",
+        "connectionsMysql": "MySQL 相关：MYSQL_DBNAME / MYSQL_USER / MYSQL_PASSWORD / MYSQL_HOST / MYSQL_PORT",
+        "connectionsRedis": "Redis 相关：REDIS_HOST / REDIS_PORT / REDIS_PASSWORD",
+        "connectionsMinio": "MinIO 相关：MINIO_USER / MINIO_PASSWORD / MINIO_HOST",
+        "logLabel": "日志与调试",
+        "logDesc": "可通过 LOG_LEVELS 与 DEBUG 控制 RagFlow 内部日志行为。",
+        "logToggleDebug": "启用调试模式（DEBUG=true）",
+        "logAdvancedTip": "进阶：可在下方环境变量中配置 LOG_LEVELS（例如 root=INFO,peewee=WARNING）。",
+        "envLabel": "环境变量",
+        "envDesc": "一行一个，支持 KEY=VALUE 格式（不含上方已经列出的保留字段）。",
+        "envPlaceholder": "RAGFLOW_EXTRA_OPTION=value\nHF_ENDPOINT=http://your-hf-mirror.example.com",
+        "saveButton": "保存 RagFlow 设置",
+        "applying": "应用中…",
+        "applyRestartButton": "应用并重启"
+      }
+    },
+    "generic": {
+      "cardDesc": "配置模块的端口、数据库和环境变量等。",
+      "fields": {
+        "enabledLabel": "启用模块",
+        "enabledDesc": "关闭后将不在控制台中展示和管理该模块。",
+        "portLabel": "服务端口",
+        "portDesc": "容器映射到本机的端口号。",
+        "portPlaceholderDefault": "8080",
+        "portPlaceholderRagflow": "9500",
+        "dbUrlLabel": "数据库 URL",
+        "dbUrlDesc": "可选，留空则使用模块内置存储或默认配置。",
+        "dbUrlPlaceholder": "postgres://user:pass@localhost:5432/dbname",
+        "envLabel": "环境变量",
+        "envDesc": "一行一个，支持 KEY=VALUE 格式。",
+        "envPlaceholder": "OPENAI_API_KEY=sk-...\nHTTP_PROXY=http://127.0.0.1:7890",
+        "saveButton": "保存模块设置",
+        "applyRestartButton": "应用并重启"
+      }
+    }
+  },
+  "toast": {
+    "saveSuccess": "设置已保存",
+    "saveFail": "保存设置失败，请稍后重试。"
+  },
+  "debug": {
+    "clearStorageTitle": "清理本地缓存",
+    "clearStorageDesc": "删除当前应用使用的 localStorage（包括语言设置、界面状态等），用于排查配置异常。清理后应用会自动刷新。",
+    "clearStorageButton": "删除所有 localStorage",
+    "clearStorageConfirm": "确认删除当前应用的所有 localStorage 数据？这将重置语言等个性化设置。",
+    "clearStorageSuccess": "localStorage 已清理，将刷新应用。",
+    "clearStorageFail": "清理 localStorage 失败，请稍后重试。"
+  },
+  "debugPage": {
+    "cardDesc": "用于问题排查和开发调试的高级选项。",
+    "showTools": {
+      "label": "显示调试工具",
+      "desc": "在界面中展示额外的调试入口。"
+    },
+    "verboseLogging": {
+      "label": "输出详细日志",
+      "desc": "开启后将输出更多 debug 日志。"
+    },
+    "showSystemName": {
+      "label": "展示系统名称设置项",
+      "desc": "关闭后，将在系统设置中隐藏“系统名称”配置。"
+    },
+    "browserViewIdleMinutes": {
+      "label": "模块 BrowserView 空闲销毁时间（分钟）",
+      "desc": "模块 BrowserView 在后台空闲超过该时间后将被销毁以释放内存。"
+    }
+  },
+  "debugActions": {
+    "stopAll": "停止所有容器",
+    "removeAll": "删除所有容器",
+    "pruneVolumes": "清空所有数据卷",
+    "fullCleanup": "一键清理",
+    "unknown": "未知的调试操作。",
+    "fail": "执行调试操作失败，请检查 Docker 状态。",
+    "successStop": "所有容器已停止。",
+    "successRemove": "所有容器已删除。",
+    "successPrune": "所有数据卷已清空。",
+    "successFull": "一键清理已完成。"
+  },
+  "dangerDialog": {
+    "title": "确认执行危险操作？",
+    "description": "你正在尝试执行「{{action}}」操作，该操作可能会导致容器或数据被清理，请确认你已经备份重要数据。",
+    "cancel": "取消",
+    "confirm": "确认执行",
+    "executing": "执行中…"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "title": "System logs",
+  "realtime": "Live",
+  "paused": "Paused",
+  "filters": {
+    "module": "Module",
+    "level": "Level",
+    "all": "All",
+    "timeRange": "Time range",
+    "last5m": "Last 5 minutes",
+    "last30m": "Last 30 minutes",
+    "last1h": "Last 1 hour",
+    "last24h": "Last 24 hours"
+  },
+  "actions": {
+    "start": "Start auto refresh",
+    "stop": "Stop auto refresh",
+    "export": "Export logs",
+    "exporting": "Exporting…",
+    "clear": "Clear"
+  },
+  "table": {
+    "time": "Time",
+    "level": "Level",
+    "module": "Module",
+    "service": "Service",
+    "message": "Message",
+    "empty": "No logs. Try adjusting filters."
+  },
+  "pagination": {
+    "summary": "{{total}} items · {{pageSize}} per page · Page {{page}} / {{totalPages}}",
+    "perPage": "Per page",
+    "items": "items"
+  },
+  "messages": {
+    "exportSuccess": "Logs have been exported to: {{path}}",
+    "exportFail": "Failed to export logs. Please try again."
+  }
+}

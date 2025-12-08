@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Field } from './Field'
+import { useTranslation } from 'react-i18next'
 
 interface NetworkSettingsProps {
   settings: AppSettings | null
@@ -14,12 +15,14 @@ interface NetworkSettingsProps {
 }
 
 export function NetworkSettings({ settings, loading, saving, onChange, onSave }: NetworkSettingsProps) {
+  const { t } = useTranslation('settings')
+
   if (loading || !settings) {
     return (
       <Card className="border-none bg-transparent shadow-none">
         <CardHeader className="px-0">
-          <CardTitle>网络设置</CardTitle>
-          <CardDescription>正在加载配置…</CardDescription>
+          <CardTitle>{t('network.loadingTitle')}</CardTitle>
+          <CardDescription>{t('network.loadingDesc')}</CardDescription>
         </CardHeader>
       </Card>
     )
@@ -96,23 +99,23 @@ export function NetworkSettings({ settings, loading, saving, onChange, onSave }:
     try {
       const result = await window.api.pullDockerImage('hello-world:latest')
       if (!result || !result.success) {
-        window.alert(result?.error ?? '测试连接失败，请检查 Docker 与代理配置。')
+        window.alert(result?.error ?? t('network.test.fail'))
       } else {
-        window.alert('测试连接成功，可以通过当前代理正常拉取镜像。')
+        window.alert(t('network.test.success'))
       }
     } catch (_err) {
-      window.alert('测试连接失败，请检查 Docker 与代理配置。')
+      window.alert(t('network.test.fail'))
     }
   }
 
   return (
     <Card className="border-none bg-transparent shadow-none">
       <CardHeader className="px-0">
-        <CardTitle>网络设置</CardTitle>
-        <CardDescription>配置镜像源、代理和网络访问策略。</CardDescription>
+        <CardTitle>{t('network.cardTitle')}</CardTitle>
+        <CardDescription>{t('network.cardDesc')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-0">
-        <Field label="镜像加速地址" description="为 Docker 配置多个镜像加速源。">
+        <Field label={t('network.mirrors.label')} description={t('network.mirrors.desc')}>
           <div className="space-y-2">
             {mirrorList.map((value, index) => (
               <div key={index} className="flex items-center gap-2">
@@ -132,7 +135,9 @@ export function NetworkSettings({ settings, loading, saving, onChange, onSave }:
                 </div>
                 <Input
                   placeholder={
-                    index === 0 ? 'https://registry.docker-cn.com' : 'https://hub-mirror.example.com'
+                    index === 0
+                      ? t('network.mirrors.primaryPlaceholder')
+                      : t('network.mirrors.secondaryPlaceholder')
                   }
                   className="font-mono text-xs flex-1"
                   value={value}
@@ -149,35 +154,35 @@ export function NetworkSettings({ settings, loading, saving, onChange, onSave }:
               </div>
             ))}
             <Button variant="outline" size="sm" className="text-xs" onClick={handleAddMirror}>
-              添加一行
+              {t('network.mirrors.add')}
             </Button>
           </div>
         </Field>
 
-        <Field label="代理模式" description="在受限网络环境下通过代理访问外部服务。">
+        <Field label={t('network.proxyMode.label')} description={t('network.proxyMode.desc')}>
           <select
             className="h-9 w-full rounded-lg border border-slate-200/80 bg-white/90 px-3 text-sm text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             value={proxy.proxyMode}
             onChange={(e) => handleProxyModeChange(e.target.value)}
           >
-            <option value="direct">直连</option>
-            <option value="system">系统代理</option>
-            <option value="manual">手动配置</option>
+            <option value="direct">{t('network.proxyMode.options.direct')}</option>
+            <option value="system">{t('network.proxyMode.options.system')}</option>
+            <option value="manual">{t('network.proxyMode.options.manual')}</option>
           </select>
         </Field>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="代理主机" description="当选择手动代理时生效。">
+          <Field label={t('network.proxyHost.label')} description={t('network.proxyHost.desc')}>
             <Input
-              placeholder="127.0.0.1"
+              placeholder={t('network.proxyHost.placeholder')}
               className="font-mono text-xs"
               value={proxy.proxyHost}
               onChange={(e) => handleProxyHostChange(e.target.value)}
             />
           </Field>
-          <Field label="代理端口" description="例如 7890 或 1080。">
+          <Field label={t('network.proxyPort.label')} description={t('network.proxyPort.desc')}>
             <Input
-              placeholder="7890"
+              placeholder={t('network.proxyPort.placeholder')}
               className="font-mono text-xs"
               value={proxy.proxyPort ? String(proxy.proxyPort) : ''}
               onChange={(e) => handleProxyPortChange(e.target.value)}
@@ -187,10 +192,10 @@ export function NetworkSettings({ settings, loading, saving, onChange, onSave }:
 
         <div className="flex gap-2 pt-2">
           <Button shine disabled={loading || saving} onClick={onSave}>
-            保存网络设置
+            {t('network.buttons.save')}
           </Button>
           <Button variant="outline" onClick={handleTestConnection}>
-            测试连接
+            {t('network.buttons.test')}
           </Button>
         </div>
       </CardContent>

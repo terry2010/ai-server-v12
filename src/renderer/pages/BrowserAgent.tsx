@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { StatusDot } from '@/components/StatusDot'
+import { useTranslation } from 'react-i18next'
 
 function formatDateInputValue(date: string) {
   if (!date) return ''
@@ -64,55 +65,72 @@ function formatDateTime(value: string | null | undefined) {
   }
 }
 
-function formatDurationMs(ms: number | null | undefined) {
+function formatDurationMs(
+  ms: number | null | undefined,
+  t: (key: string, options?: Record<string, any>) => string,
+) {
   if (ms == null || Number.isNaN(ms) || ms < 0) return '—'
-  if (ms < 1000) return `${ms} ms`
+  if (ms < 1000) return t('browserAgent:timeline.durationMs', { ms })
   const seconds = ms / 1000
-  if (seconds < 60) return `${seconds.toFixed(1)} s`
+  if (seconds < 60) return t('browserAgent:timeline.durationSec', { sec: Number(seconds.toFixed(1)) })
   const m = Math.floor(seconds / 60)
   const s = Math.round(seconds - m * 60)
-  return `${m} 分 ${s} 秒`
+  return t('browserAgent:timeline.durationMinSec', { min: m, sec: s })
 }
 
-function formatFileSize(size: number | null | undefined) {
-  if (size == null || !Number.isFinite(size) || size < 0) return '未知大小'
-  if (size < 1024) return `${size} B`
+function formatFileSize(
+  size: number | null | undefined,
+  t: (key: string, options?: Record<string, any>) => string,
+) {
+  if (size == null || !Number.isFinite(size) || size < 0) return t('browserAgent:files.unknownSize')
+  if (size < 1024) return t('browserAgent:files.sizeB', { value: size })
   const kb = size / 1024
-  if (kb < 1024) return `${kb.toFixed(1)} KB`
+  if (kb < 1024) return t('browserAgent:files.sizeKB', { value: Number(kb.toFixed(1)) })
   const mb = kb / 1024
-  if (mb < 1024) return `${mb.toFixed(1)} MB`
+  if (mb < 1024) return t('browserAgent:files.sizeMB', { value: Number(mb.toFixed(1)) })
   const gb = mb / 1024
-  return `${gb.toFixed(1)} GB`
+  return t('browserAgent:files.sizeGB', { value: Number(gb.toFixed(1)) })
 }
 
-function translateStatus(status: 'running' | 'closed' | 'error') {
-  if (status === 'running') return '运行中'
-  if (status === 'closed') return '已关闭'
-  return '异常'
+function translateStatus(
+  status: 'running' | 'closed' | 'error',
+  t: (key: string, options?: Record<string, any>) => string,
+) {
+  if (status === 'running') return t('browserAgent:status.running')
+  if (status === 'closed') return t('browserAgent:status.closed')
+  return t('browserAgent:status.error')
 }
 
-function translateActionType(type: string | null | undefined) {
-  const t = (type || '').toLowerCase()
-  if (t === 'navigate') return '打开页面'
-  if (t === 'navigate.auto') return '页面跳转'
-  if (t === 'click') return '点击元素'
-  if (t === 'fill') return '输入文本'
-  if (t === 'screenshot') return '截图'
-  return type || '未知操作'
+function translateActionType(
+  type: string | null | undefined,
+  t: (key: string, options?: Record<string, any>) => string,
+) {
+  const normalized = (type || '').toLowerCase()
+  if (normalized === 'navigate') return t('browserAgent:actions.navigate')
+  if (normalized === 'navigate.auto') return t('browserAgent:actions.navigateAuto')
+  if (normalized === 'click') return t('browserAgent:actions.click')
+  if (normalized === 'fill') return t('browserAgent:actions.fill')
+  if (normalized === 'screenshot') return t('browserAgent:actions.screenshot')
+  return type || t('browserAgent:actions.unknown')
 }
 
 function buildActionSummary(
   action: BrowserAgentActionTimelineItem,
-  options?: { redirectExpanded?: boolean; onToggleRedirect?: () => void },
+  options: {
+    redirectExpanded?: boolean
+    onToggleRedirect?: () => void
+    t: (key: string, options?: Record<string, any>) => string
+  },
 ) {
   const type = (action.type || '').toLowerCase()
   const params: any = action.params || {}
+  const t = options.t
 
   if (type === 'navigate') {
     const base =
       params && typeof params.url === 'string' && params.url
-        ? `打开 URL：${params.url}`
-        : '打开页面'
+        ? t('browserAgent:redirectTable.baseNavigate', { url: params.url })
+        : t('browserAgent:redirectTable.baseNavigateNoUrl')
 
     const rawChain = Array.isArray(params && params.redirectChain)
       ? params.redirectChain
@@ -184,9 +202,9 @@ function buildActionSummary(
           <table className="min-w-full border-separate border-spacing-y-0.5">
             <thead>
               <tr className="text-left text-[10px] text-slate-400 dark:text-slate-500">
-                <th className="w-[52px] pr-2 font-normal">HTTP</th>
-                <th className="w-[80px] pr-2 font-normal">耗时</th>
-                <th className="font-normal">URL</th>
+                <th className="w-[52px] pr-2 font-normal">{t('browserAgent:redirectTable.http')}</th>
+                <th className="w-[80px] pr-2 font-normal">{t('browserAgent:redirectTable.duration')}</th>
+                <th className="font-normal">{t('browserAgent:redirectTable.url')}</th>
               </tr>
             </thead>
             <tbody>
@@ -197,7 +215,7 @@ function buildActionSummary(
                   </td>
                   <td className="align-top pr-2 text-slate-500 dark:text-slate-400">
                     {rows[0].durationMs != null
-                      ? formatDurationMs(rows[0].durationMs)
+                      ? formatDurationMs(rows[0].durationMs, t)
                       : '—'}
                   </td>
                   <td className="align-top break-all text-slate-700 dark:text-slate-200">
@@ -208,8 +226,15 @@ function buildActionSummary(
 
               {shouldCollapse && total > 2 && (
                 <tr key="__collapse__">
-                  <td colSpan={3} className="cursor-pointer select-none py-0.5 text-center text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200" onClick={onToggleRedirect}>
-                    共 {total} 条重定向，点击展开中间 {total - 2} 条
+                  <td
+                    colSpan={3}
+                    className="cursor-pointer select-none py-0.5 text-center text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                    onClick={onToggleRedirect}
+                  >
+                    {t('browserAgent:redirectTable.collapseTip', {
+                      total,
+                      middle: total - 2,
+                    })}
                   </td>
                 </tr>
               )}
@@ -224,7 +249,7 @@ function buildActionSummary(
                     </td>
                     <td className="align-top pr-2 text-slate-500 dark:text-slate-400">
                       {rows[total - 1].durationMs != null
-                        ? formatDurationMs(rows[total - 1].durationMs)
+                        ? formatDurationMs(rows[total - 1].durationMs, t)
                         : '—'}
                     </td>
                     <td className="align-top break-all text-slate-700 dark:text-slate-200">
@@ -240,9 +265,7 @@ function buildActionSummary(
                     </td>
                     <td className="align-top pr-2 text-slate-500 dark:text-slate-400">
                       {row.durationMs != null
-                        ? formatDurationMs(row.durationMs)
-                        : idx === 0
-                        ? '—'
+                        ? formatDurationMs(row.durationMs, t)
                         : '—'}
                     </td>
                     <td className="align-top break-all text-slate-700 dark:text-slate-200">
@@ -256,7 +279,7 @@ function buildActionSummary(
         </div>
         {shouldCollapse && onToggleRedirect && (
           <div className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
-            提示：点击中间行可展开完整重定向链。
+            {t('browserAgent:redirectTable.hint')}
           </div>
         )}
       </div>
@@ -265,15 +288,15 @@ function buildActionSummary(
 
   if (type === 'navigate.auto') {
     const url = params && typeof params.url === 'string' ? params.url : ''
-    if (url) return `页面跳转到：${url}`
-    return '页面跳转'
+    if (url) return t('browserAgent:actions.navigateAutoTo', { url })
+    return t('browserAgent:actions.navigateAuto')
   }
 
   if (type === 'click') {
     if (params && typeof params.selector === 'string' && params.selector) {
-      return `点击元素：${params.selector}`
+      return t('browserAgent:actions.clickWithSelector', { selector: params.selector })
     }
-    return '点击元素'
+    return t('browserAgent:actions.click')
   }
 
   if (type === 'fill') {
@@ -284,12 +307,15 @@ function buildActionSummary(
     const text = params && typeof params.text === 'string' ? params.text : ''
     const textPreview = text.length > 32 ? `${text.slice(0, 32)}…` : text
     if (selector && textPreview) {
-      return `在 ${selector} 中输入：${textPreview}`
+      return t('browserAgent:actions.fillWithSelector', {
+        selector,
+        text: textPreview,
+      })
     }
     if (textPreview) {
-      return `输入文本：${textPreview}`
+      return t('browserAgent:actions.fillWithText', { text: textPreview })
     }
-    return '输入文本'
+    return t('browserAgent:actions.fill')
   }
 
   if (type === 'screenshot') {
@@ -299,9 +325,9 @@ function buildActionSummary(
         : ''
     const mode =
       params && typeof params.mode === 'string' && params.mode ? params.mode : ''
-    if (desc) return `截图：${desc}`
-    if (mode) return `截图模式：${mode}`
-    return '截图'
+    if (desc) return t('browserAgent:actions.screenshotWithDesc', { desc })
+    if (mode) return t('browserAgent:actions.screenshotWithMode', { mode })
+    return t('browserAgent:actions.screenshot')
   }
 
   try {
@@ -312,6 +338,7 @@ function buildActionSummary(
 }
 
 export function BrowserAgentPage() {
+  const { t } = useTranslation('browserAgent')
   const [browserAgentEnabled, setBrowserAgentEnabled] = useState<boolean | null>(null)
   const [browserAgentPort, setBrowserAgentPort] = useState<number | null>(null)
 
@@ -374,7 +401,7 @@ export function BrowserAgentPage() {
       setSessionsError(null)
       try {
         if (!window.api || typeof window.api.browserAgentListSessions !== 'function') {
-          throw new Error('Browser Agent IPC 尚未注册，请确认是通过桌面客户端运行，并已重新启动应用。')
+          throw new Error(t('errors.ipcListNotRegistered'))
         }
         const payload: any = {
           date,
@@ -416,7 +443,7 @@ export function BrowserAgentPage() {
       } catch (err: any) {
         if (!cancelled) {
           setSessions([])
-          setSessionsError(err && err.message ? String(err.message) : '加载会话列表失败。')
+          setSessionsError(err && err.message ? String(err.message) : t('errors.loadSessionsFail'))
         }
       } finally {
         if (!cancelled) {
@@ -457,7 +484,7 @@ export function BrowserAgentPage() {
       setDetailError(null)
       try {
         if (!window.api || typeof window.api.browserAgentGetSessionDetail !== 'function') {
-          throw new Error('Browser Agent 详情 IPC 尚未注册，请确认是通过桌面客户端运行。')
+          throw new Error(t('errors.detailIpcNotRegistered'))
         }
         const result = await window.api.browserAgentGetSessionDetail({
           sessionId: selectedSessionId,
@@ -466,14 +493,14 @@ export function BrowserAgentPage() {
         if (cancelled) return
         if (!result) {
           setDetail(null)
-          setDetailError('未找到该 Session 的详细信息（可能已被清理或日期不匹配）。')
+          setDetailError(t('errors.detailNotFound'))
         } else {
           setDetail(result)
         }
       } catch (err: any) {
         if (!cancelled) {
           setDetail(null)
-          setDetailError(err && err.message ? String(err.message) : '加载 Session 详情失败。')
+          setDetailError(err && err.message ? String(err.message) : t('errors.loadDetailFail'))
         }
       } finally {
         if (!cancelled) {
@@ -503,24 +530,24 @@ export function BrowserAgentPage() {
       const result = await window.api.browserAgentShowSessionWindow(selectedSessionId)
       if (!result || !result.success) {
         const reason = result && result.reason
-        let message = result && result.error ? result.error : '无法显示浏览器窗口。'
+        let message = result && result.error ? result.error : t('errors.showWindowDefault')
         if (!result || !result.error) {
           if (reason === 'invalid_session_id') {
-            message = '无效的 Session ID，无法显示窗口。'
+            message = t('errors.showWindowInvalidSession')
           } else if (reason === 'session_not_found') {
-            message = 'Session 已不在内存中，可能应用已经重启或 Session 已结束。'
+            message = t('errors.showWindowNotFound')
           } else if (reason === 'no_window_id') {
-            message = '该 Session 没有关联窗口，可能从未成功打开过浏览器。'
+            message = t('errors.showWindowNoWindow')
           } else if (reason === 'window_closed') {
-            message = '浏览器窗口已经关闭，无法再次显示。'
+            message = t('errors.showWindowClosed')
           }
         }
         toast.error(message)
       } else {
-        toast.success('已尝试显示浏览器窗口，请切回桌面查看。')
+        toast.success(t('toasts.showWindowSuccess'))
       }
     } catch {
-      toast.error('显示浏览器窗口失败，请稍后重试。')
+      toast.error(t('errors.showWindowFail'))
     } finally {
       setShowingWindow(false)
     }
@@ -536,10 +563,10 @@ export function BrowserAgentPage() {
       })
       if (!result || !result.success) {
         const message = result && result.error ? result.error : '打开截图失败，请检查文件是否仍然存在。'
-        toast.error(message)
+        toast.error(message || t('errors.openSnapshotFail'))
       }
     } catch {
-      toast.error('打开截图失败，请稍后重试。')
+      toast.error(t('errors.openSnapshotRetry'))
     } finally {
       setOpeningSnapshotId((prev) => (prev === snapshotId ? null : prev))
     }
@@ -552,7 +579,7 @@ export function BrowserAgentPage() {
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            AI 浏览器 · 会话观察
+            {t('browserAgent:header.title')}
           </h2>
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700 dark:bg-slate-900/80 dark:text-slate-200">
             <StatusDot
@@ -560,13 +587,15 @@ export function BrowserAgentPage() {
             />
             <span>
               {browserAgentEnabled === null
-                ? '状态未知'
+                ? t('browserAgent:header.statusUnknown')
                 : browserAgentEnabled
-                ? 'Browser Agent 已启用'
-                : 'Browser Agent 未启用'}
+                ? t('browserAgent:header.statusEnabled')
+                : t('browserAgent:header.statusDisabled')}
             </span>
             {browserAgentPort != null && (
-              <span className="ml-1 text-slate-400">端口 {browserAgentPort}</span>
+              <span className="ml-1 text-slate-400">
+                {t('browserAgent:header.portLabel', { port: browserAgentPort })}
+              </span>
             )}
           </span>
         </div>
@@ -595,15 +624,15 @@ export function BrowserAgentPage() {
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as 'all' | 'running' | 'closed')}
           >
-            <option value="all">全部状态</option>
-            <option value="running">运行中</option>
-            <option value="closed">已关闭</option>
+            <option value="all">{t('browserAgent:filters.statusAll')}</option>
+            <option value="running">{t('browserAgent:filters.statusRunning')}</option>
+            <option value="closed">{t('browserAgent:filters.statusClosed')}</option>
           </select>
           <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
             <SearchIcon />
             <input
               className="h-6 w-40 bg-transparent text-xs outline-none placeholder:text-slate-400"
-              placeholder="搜索 session / profile / clientId / 域名"
+              placeholder={t('browserAgent:filters.searchPlaceholder')}
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
             />
@@ -616,14 +645,14 @@ export function BrowserAgentPage() {
           <CardHeader className="px-4 pt-4">
             <div className="flex items-center justify-between gap-2 text-xs">
               <div>
-                <CardTitle className="text-sm">会话列表</CardTitle>
-                <CardDescription>按日期从 NDJSON 中聚合出的会话记录，仅供只读观察。</CardDescription>
+                <CardTitle className="text-sm">{t('browserAgent:list.title')}</CardTitle>
+                <CardDescription>{t('browserAgent:list.description')}</CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] text-slate-500 dark:text-slate-400">
                   {loadingSessions
-                    ? '加载中…'
-                    : `共 ${sessions.length} 条`}
+                    ? t('browserAgent:list.loading')
+                    : t('browserAgent:list.count', { count: sessions.length })}
                 </span>
                 <Button
                   size="icon"
@@ -631,7 +660,7 @@ export function BrowserAgentPage() {
                   className="h-7 w-7 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
                   onClick={() => setReloadFlag((v) => v + 1)}
                   disabled={loadingSessions}
-                  aria-label="刷新会话列表"
+                  aria-label={t('common:actions.refresh')}
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${loadingSessions ? 'animate-spin' : ''}`} />
                 </Button>
@@ -647,7 +676,7 @@ export function BrowserAgentPage() {
               )}
               {!sessionsError && !loadingSessions && sessions.length === 0 && (
                 <div className="rounded-md bg-slate-50 px-2 py-2 text-[11px] text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
-                  当前日期下暂无 Browser Agent 会话记录。
+                  {t('browserAgent:list.empty')}
                 </div>
               )}
               {sessions.map((s) => {
@@ -665,10 +694,16 @@ export function BrowserAgentPage() {
                   >
                     <div className="mt-0.5 flex flex-col items-center gap-1">
                       <StatusDot
-                        status={s.status === 'running' ? 'running' : s.status === 'closed' ? 'stopped' : 'error'}
+                        status={
+                          s.status === 'running'
+                            ? 'running'
+                            : s.status === 'closed'
+                            ? 'stopped'
+                            : 'error'
+                        }
                       />
                       <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-                        {s.actionsCount} 步
+                        {t('browserAgent:list.steps', { count: s.actionsCount })}
                       </span>
                     </div>
                     <div className="flex-1 space-y-1">
@@ -677,13 +712,13 @@ export function BrowserAgentPage() {
                           {s.sessionId}
                         </div>
                         <span className="whitespace-nowrap text-[10px] text-slate-500 dark:text-slate-400">
-                          {translateStatus(s.status)}
+                          {translateStatus(s.status, t)}
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-500 dark:text-slate-400">
-                        {s.profile && <span>profile: {s.profile}</span>}
-                        {s.clientId && <span>client: {s.clientId}</span>}
-                        {s.domain && <span>域名: {s.domain}</span>}
+                        {s.profile && <span>{t('browserAgent:list.profile', { value: s.profile })}</span>}
+                        {s.clientId && <span>{t('browserAgent:list.client', { value: s.clientId })}</span>}
+                        {s.domain && <span>{t('browserAgent:list.domain', { value: s.domain })}</span>}
                       </div>
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400 dark:text-slate-500">
                         <span>
@@ -709,13 +744,13 @@ export function BrowserAgentPage() {
           <CardHeader className="px-4 pt-4">
             <div className="flex items-center justify-between gap-2 text-xs">
               <div>
-                <CardTitle className="text-sm">会话详情</CardTitle>
+                <CardTitle className="text-sm">{t('browserAgent:detail.title')}</CardTitle>
                 <CardDescription>
-                  仅从本地 NDJSON 元数据与截图文件中还原，不会重新执行历史操作。
+                  {t('browserAgent:detail.description')}
                 </CardDescription>
               </div>
               {selectedSummary && (
-                <div className="flex flex-col items-end gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+                <div className="flex flex-col items-end gap-2 text-[10px] text-slate-500 dark:text-slate-300">
                   <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 dark:bg-slate-900/80">
                     <StatusDot
                       status={
@@ -726,7 +761,7 @@ export function BrowserAgentPage() {
                           : 'error'
                       }
                     />
-                    <span>{translateStatus(selectedSummary.status)}</span>
+                    <span>{translateStatus(selectedSummary.status, t)}</span>
                   </div>
                   <div className="flex items-center gap-2 text-[10px] text-slate-400">
                     <span>
@@ -735,7 +770,9 @@ export function BrowserAgentPage() {
                     </span>
                     {selectedSummary.lastActionAt && (
                       <span>
-                        最后动作：{formatDateTime(selectedSummary.lastActionAt)}
+                        {t('browserAgent:detail.lastAction', {
+                          action: formatDateTime(selectedSummary.lastActionAt),
+                        })}
                       </span>
                     )}
                   </div>
@@ -746,13 +783,13 @@ export function BrowserAgentPage() {
           <CardContent className="space-y-3 px-4 pb-4 pt-2 text-xs">
             {!selectedSessionId && (
               <div className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
-                请先在左侧选择一个 Session 进行查看。
+                {t('browserAgent:detail.selectHint')}
               </div>
             )}
 
             {selectedSessionId && loadingDetail && (
               <div className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
-                正在加载 Session 详情…
+                {t('browserAgent:detail.loading')}
               </div>
             )}
 
@@ -770,13 +807,21 @@ export function BrowserAgentPage() {
                       {detail.session.sessionId}
                     </div>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-500 dark:text-slate-400">
-                      {detail.session.profile && <span>profile: {detail.session.profile}</span>}
-                      {detail.session.clientId && <span>client: {detail.session.clientId}</span>}
-                      {detail.session.domain && <span>域名: {detail.session.domain}</span>}
-                      <span>动作数：{detail.session.actionsCount}</span>
+                      {detail.session.profile && (
+                        <span>{t('browserAgent:list.profile', { value: detail.session.profile })}</span>
+                      )}
+                      {detail.session.clientId && (
+                        <span>{t('browserAgent:list.client', { value: detail.session.clientId })}</span>
+                      )}
+                      {detail.session.domain && (
+                        <span>{t('browserAgent:list.domain', { value: detail.session.domain })}</span>
+                      )}
+                      <span>{t('browserAgent:detail.sessionActions', { count: detail.session.actionsCount })}</span>
                       {detail.session.lastActionType && (
                         <span>
-                          最后动作：{translateActionType(detail.session.lastActionType)}
+                          {t('browserAgent:detail.sessionLastAction', {
+                            type: translateActionType(detail.session.lastActionType, t),
+                          })}
                         </span>
                       )}
                     </div>
@@ -790,11 +835,11 @@ export function BrowserAgentPage() {
                       onClick={handleShowWindow}
                     >
                       <Maximize2 className="mr-1 h-3 w-3" />
-                      {showingWindow ? '正在尝试显示…' : '显示浏览器窗口'}
+                      {showingWindow ? t('browserAgent:detail.showWindowLoading') : t('browserAgent:detail.showWindow')}
                     </Button>
                     <div className="flex items-center gap-2 text-[10px] text-slate-400">
                       <ExternalLink className="h-3 w-3" />
-                      <span>本页仅做可视化复盘，不会自动重新执行历史操作。</span>
+                      <span>{t('browserAgent:detail.showWindowInfo')}</span>
                     </div>
                   </div>
                 </div>
@@ -804,12 +849,12 @@ export function BrowserAgentPage() {
                     <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-100 text-sky-600 dark:bg-sky-500/10 dark:text-sky-300">
                       <Eye className="h-3 w-3" />
                     </span>
-                    <span>动作时间线（按时间顺序）</span>
+                    <span>{t('browserAgent:timeline.title')}</span>
                   </div>
 
                   {detail.actions.length === 0 && (
                     <div className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
-                      当前 Session 暂无记录到的动作。
+                      {t('browserAgent:timeline.empty')}
                     </div>
                   )}
 
@@ -839,10 +884,10 @@ export function BrowserAgentPage() {
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="text-[11px] font-semibold text-slate-900 dark:text-slate-50">
-                                  {translateActionType(action.type)}
+                                  {translateActionType(action.type, t)}
                                 </span>
                                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-                                  用时 {formatDurationMs(action.durationMs)}
+                                  {formatDurationMs(action.durationMs, t)}
                                 </span>
                                 {typeof action.httpStatus === 'number' &&
                                   Number.isFinite(action.httpStatus) && (
@@ -852,9 +897,9 @@ export function BrowserAgentPage() {
                                   )}
                               </div>
                               {hasScreenshot && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] text-slate-500 dark:bg-sky-500/10 dark:text-sky-300">
                                   <ImageIcon className="h-3 w-3" />
-                                  截图
+                                  {t('browserAgent:actions.screenshot')}
                                 </span>
                               )}
                             </div>
@@ -862,12 +907,14 @@ export function BrowserAgentPage() {
                               {buildActionSummary(action, {
                                 redirectExpanded,
                                 onToggleRedirect: handleToggleRedirect,
+                                t,
                               })}
                             </div>
                             <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400">
                               {action.errorMessage && (
                                 <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] text-red-600 dark:bg-red-500/10 dark:text-red-200">
-                                  失败：{action.errorMessage}
+                                  {t('browserAgent:errors.actionFailedPrefix')}
+                                  {action.errorMessage}
                                 </span>
                               )}
                               {hasScreenshot && action.screenshot && (
@@ -879,7 +926,9 @@ export function BrowserAgentPage() {
                                   onClick={() => handleOpenSnapshot(action.screenshot!.snapshotId)}
                                 >
                                   <Eye className="mr-1 h-3 w-3" />
-                                  {isOpening ? '正在打开…' : '查看截图'}
+                                  {isOpening
+                                    ? t('browserAgent:files.openingSnapshot')
+                                    : t('browserAgent:files.openSnapshot')}
                                 </Button>
                               )}
                             </div>

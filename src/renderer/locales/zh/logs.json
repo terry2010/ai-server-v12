@@ -1,0 +1,39 @@
+{
+  "title": "系统日志",
+  "realtime": "实时",
+  "paused": "已暂停",
+  "filters": {
+    "module": "选择模块",
+    "level": "选择日志级别",
+    "all": "全部",
+    "timeRange": "时间范围",
+    "last5m": "最近 5 分钟",
+    "last30m": "最近 30 分钟",
+    "last1h": "最近 1 小时",
+    "last24h": "最近 24 小时"
+  },
+  "actions": {
+    "start": "开始刷新",
+    "stop": "停止刷新",
+    "export": "导出日志",
+    "exporting": "导出中…",
+    "clear": "清空"
+  },
+  "table": {
+    "time": "时间",
+    "level": "级别",
+    "module": "模块",
+    "service": "服务",
+    "message": "消息",
+    "empty": "暂无日志，尝试调整过滤条件。"
+  },
+  "pagination": {
+    "summary": "共 {{total}} 条 · 每页 {{pageSize}} 条 · 第 {{page}} / {{totalPages}} 页",
+    "perPage": "每页",
+    "items": "条"
+  },
+  "messages": {
+    "exportSuccess": "日志已导出到：{{path}}",
+    "exportFail": "日志导出失败，请稍后重试。"
+  }
+}

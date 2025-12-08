@@ -1,0 +1,42 @@
+{
+  "header": {
+    "title": "性能监控",
+    "badgeRunning": "实时",
+    "badgePaused": "已暂停"
+  },
+  "actions": {
+    "refresh": "刷新",
+    "startAuto": "开始自动刷新",
+    "stopAuto": "停止自动刷新"
+  },
+  "systemCard": {
+    "title": "系统资源使用率",
+    "desc": "CPU / 内存 / 磁盘 当前占用情况。",
+    "empty": "暂无法获取系统指标。",
+    "metrics": {
+      "cpu": "CPU",
+      "memory": "内存",
+      "disk": "磁盘"
+    }
+  },
+  "modulesCard": {
+    "title": "服务状态监控",
+    "desc": "各核心服务的运行状态和资源占用。",
+    "empty": "暂无法获取模块指标。",
+    "rowStatus": "CPU {{cpu}}% · 内存 {{memory}}%"
+  },
+  "charts": {
+    "cpuTitle": "CPU 使用趋势",
+    "cpuDesc": "当前仅展示示意曲线，后续可接入历史数据。",
+    "memoryTitle": "内存使用趋势",
+    "memoryDesc": "当前仅展示示意曲线，后续可接入历史数据。",
+    "axisNow": "现在",
+    "axis15m": "+15min",
+    "axis30m": "+30min",
+    "axis45m": "+45min",
+    "axis60m": "+60min"
+  },
+  "service": {
+    "latencyNotRunning": "未运行"
+  }
+}

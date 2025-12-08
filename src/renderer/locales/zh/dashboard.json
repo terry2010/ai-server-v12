@@ -1,0 +1,103 @@
+{
+  "hero": {
+    "title": "欢迎使用 AI-Server 管理平台",
+    "description": "统一管理 n8n / Dify / OneAPI / RagFlow 等多种 AI 服务，一键查看运行状态、性能与日志。",
+    "pill": "本地 Docker 正在运行",
+    "envPill": "本地开发环境",
+    "action": "快速开始",
+    "slides": {
+      "overview": "概览",
+      "workflowTitle": "一键启用常用自动化工作流",
+      "workflowDesc": "使用 n8n 模板快速编排通知、报表、监控等自动化流程。",
+      "workflowPill": "推荐 · 工作流模板",
+      "workflowAction": "查看示例工作流",
+      "marketTitle": "安装开箱即用的 AI 应用",
+      "marketDesc": "从客服助手、文档问答到工作流模板，几分钟搭建你的 AI 场景。",
+      "marketPill": "推荐 · AI 市场",
+      "marketAction": "前往 AI 市场"
+    },
+    "metrics": {
+      "running": "运行服务",
+      "status": "系统状态",
+      "uptime": "已运行时间",
+      "uptimeDemo": "2 小时 15 分钟",
+      "statusOk": "正常",
+      "statusIssue": "有异常服务"
+    },
+    "carousel": {
+      "prev": "上一张",
+      "next": "下一张"
+    }
+  },
+  "service": {
+    "uptime": {
+      "running": "已启动",
+      "starting": "启动中…",
+      "stopping": "停止中…"
+    },
+    "labels": {
+      "uptime": "运行时间",
+      "port": "端口",
+      "cpu": "CPU",
+      "memory": "内存"
+    },
+    "buttons": {
+      "start": "启动",
+      "stop": "停止",
+      "starting": "启动中",
+      "stopping": "停止中",
+      "viewLogs": "查看日志"
+    }
+  },
+  "modules": {
+    "n8n": {
+      "description": "工作流自动化与编排引擎"
+    },
+    "dify": {
+      "description": "AI 应用与工作流开发平台"
+    },
+    "oneapi": {
+      "description": "统一 AI API 网关与配额管理"
+    },
+    "ragflow": {
+      "description": "RAG 知识库问答与文档检索系统"
+    }
+  },
+  "docker": {
+    "title": "Docker 服务",
+    "statusRunning": "Docker 当前运行中，可以管理和监控容器",
+    "statusStarting": "Docker 正在启动中，请稍候…",
+    "statusStoppedCanStart": "Docker 未运行，可以点击右侧按钮尝试启动 Docker Desktop",
+    "statusNotInstalled": "Docker 未安装，请先安装 Docker Desktop",
+    "running": "运行中",
+    "stopped": "未运行",
+    "overviewRunningServices": "运行服务",
+    "overviewUptime": "平台运行",
+    "overviewNetwork": "网络",
+    "overviewNetworkValue": "bridge",
+    "refresh": "刷新状态",
+    "startAll": "启动所有服务",
+    "startingDocker": "Docker 启动中…",
+    "startDocker": "启动 Docker 服务",
+    "installDocker": "安装 Docker 服务"
+  },
+  "errors": {
+    "stopModuleFailed": "停止模块失败，请检查 Docker 状态。",
+    "startModuleFailed": "启动模块失败，请检查 Docker 状态。",
+    "dockerStartFailed": "无法启动 Docker 服务，请手动启动 Docker Desktop。",
+    "dockerNotInstalled": "检测到本机未正确安装 Docker，请先安装 Docker Desktop。",
+    "dockerTimeout": "Docker 启动超时，请手动确认 Docker Desktop 状态。",
+    "dockerStatusCheckFailed": "检测 Docker 状态失败，请手动确认 Docker Desktop 是否已启动。"
+  },
+  "browserAgent": {
+    "title": "AI 浏览器 · Browser Agent",
+    "enabled": "已启用",
+    "disabled": "未启用",
+    "port": "端口",
+    "sessions": "会话",
+    "cpu": "CPU",
+    "memory": "内存",
+    "open": "打开",
+    "description": "查看本地 Browser Agent 执行的历史会话与截图，仅做只读复盘。"
+  }
+}

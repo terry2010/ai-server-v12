@@ -1,0 +1,101 @@
+{
+  "header": {
+    "title": "AI Browser · Session inspector",
+    "statusUnknown": "Status unknown",
+    "statusEnabled": "Browser Agent enabled",
+    "statusDisabled": "Browser Agent disabled",
+    "portLabel": "Port {{port}}"
+  },
+  "filters": {
+    "statusAll": "All statuses",
+    "statusRunning": "Running",
+    "statusClosed": "Closed",
+    "searchPlaceholder": "Search session / profile / clientId / domain"
+  },
+  "status": {
+    "running": "Running",
+    "closed": "Closed",
+    "error": "Error"
+  },
+  "list": {
+    "title": "Sessions",
+    "description": "Sessions aggregated from NDJSON files for the selected date (read-only).",
+    "loading": "Loading…",
+    "count": "{{count}} sessions",
+    "empty": "No Browser Agent sessions for this date.",
+    "steps": "{{count}} steps",
+    "profile": "profile: {{value}}",
+    "client": "client: {{value}}",
+    "domain": "domain: {{value}}"
+  },
+  "detail": {
+    "title": "Session details",
+    "description": "Reconstructed only from local NDJSON metadata and screenshots. No actions will be replayed.",
+    "selectHint": "Select a session from the left to view details.",
+    "loading": "Loading session details…",
+    "lastAction": "Last action: {{action}}",
+    "sessionActions": "Actions: {{count}}",
+    "sessionLastAction": "Last action: {{type}}",
+    "showWindow": "Show browser window",
+    "showWindowLoading": "Trying to show…",
+    "showWindowInfo": "This page is for visual inspection only. It will not re-run past actions."
+  },
+  "redirectTable": {
+    "http": "HTTP",
+    "duration": "Duration",
+    "url": "URL",
+    "baseNavigate": "Open URL: {{url}}",
+    "baseNavigateNoUrl": "Open page",
+    "collapseTip": "{{total}} redirects, click to expand the middle {{middle}} entries",
+    "hint": "Tip: click the middle row to expand the full redirect chain."
+  },
+  "actions": {
+    "navigate": "Open page",
+    "navigateAuto": "Page navigation",
+    "navigateAutoTo": "Navigate to: {{url}}",
+    "click": "Click element",
+    "clickWithSelector": "Click element: {{selector}}",
+    "fill": "Fill text",
+    "fillWithSelector": "Fill {{text}} in {{selector}}",
+    "fillWithText": "Fill text: {{text}}",
+    "screenshot": "Screenshot",
+    "screenshotWithDesc": "Screenshot: {{desc}}",
+    "screenshotWithMode": "Screenshot mode: {{mode}}",
+    "unknown": "Unknown action"
+  },
+  "timeline": {
+    "title": "Action timeline (in chronological order)",
+    "empty": "No recorded actions for this session.",
+    "durationMs": "{{ms}} ms",
+    "durationSec": "{{sec}} s",
+    "durationMinSec": "{{min}} min {{sec}} s"
+  },
+  "files": {
+    "unknownSize": "Unknown size",
+    "sizeB": "{{value}} B",
+    "sizeKB": "{{value}} KB",
+    "sizeMB": "{{value}} MB",
+    "sizeGB": "{{value}} GB",
+    "openSnapshot": "View screenshot",
+    "openingSnapshot": "Opening…"
+  },
+  "errors": {
+    "ipcListNotRegistered": "Browser Agent IPC is not registered. Please make sure you are running the desktop app and have restarted it.",
+    "loadSessionsFail": "Failed to load session list.",
+    "detailIpcNotRegistered": "Browser Agent detail IPC is not registered. Please make sure you are running the desktop app.",
+    "detailNotFound": "No detail found for this session (it may have been cleaned or the date does not match).",
+    "loadDetailFail": "Failed to load session details.",
+    "showWindowDefault": "Failed to show browser window.",
+    "showWindowInvalidSession": "Invalid session ID, cannot show window.",
+    "showWindowNotFound": "Session is no longer in memory. The app may have restarted or the session has ended.",
+    "showWindowNoWindow": "This session has no associated window. It may never have successfully opened a browser.",
+    "showWindowClosed": "The browser window has been closed and cannot be shown again.",
+    "showWindowFail": "Failed to show browser window. Please try again.",
+    "actionFailedPrefix": "Failed: ",
+    "openSnapshotFail": "Failed to open screenshot. Please check whether the file still exists.",
+    "openSnapshotRetry": "Failed to open screenshot. Please try again later."
+  },
+  "toasts": {
+    "showWindowSuccess": "Tried to show the browser window. Switch to desktop to view it."
+  }
+}

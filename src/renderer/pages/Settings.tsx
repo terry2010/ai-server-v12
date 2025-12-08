@@ -22,24 +22,28 @@ import { ModuleSettings as ModuleSettingsPanel } from './settings/ModuleSettings
 import { DebugSettings } from './settings/DebugSettings'
 import { BrowserAgentSettings as BrowserAgentSettingsPanel } from './settings/BrowserAgentSettings'
 import { Field } from './settings/Field'
+import { useTranslation } from 'react-i18next'
 
 const tabs = [
-  { key: 'system', label: '系统设置', icon: SlidersHorizontal },
-  { key: 'network', label: '网络设置', icon: Network },
-  { key: 'agent', label: 'AI浏览器设置', icon: Terminal },
-  { key: 'n8n', label: 'n8n 设置', icon: Terminal },
-  { key: 'dify', label: 'Dify 设置', icon: Terminal },
-  { key: 'oneapi', label: 'OneAPI 设置', icon: Terminal },
-  { key: 'ragflow', label: 'RagFlow 设置', icon: Terminal },
-  { key: 'debug', label: '调试设置', icon: AlertTriangle },
+  { key: 'system', icon: SlidersHorizontal },
+  { key: 'network', icon: Network },
+  { key: 'agent', icon: Terminal },
+  { key: 'n8n', icon: Terminal },
+  { key: 'dify', icon: Terminal },
+  { key: 'oneapi', icon: Terminal },
+  { key: 'ragflow', icon: Terminal },
+  { key: 'debug', icon: AlertTriangle },
 ] as const
 
 export type SettingsTabKey = (typeof tabs)[number]['key']
 
 export function SettingsPage() {
+  const { t } = useTranslation('settings')
   const [activeTab, setActiveTab] = useState<SettingsTabKey>('system')
   const [dangerOpen, setDangerOpen] = useState(false)
-  const [dangerAction, setDangerAction] = useState<string | null>(null)
+  const [dangerAction, setDangerAction] = useState<
+    'stopAll' | 'removeAll' | 'pruneVolumes' | 'fullCleanup' | null
+  >(null)
   const [dangerLoading, setDangerLoading] = useState(false)
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [loading, setLoading] = useState(true)
@@ -98,20 +102,20 @@ export function SettingsPage() {
     try {
       const next = await window.api.updateSettings(settings)
       setSettings(next)
-      toast.success('设置已保存')
+      toast.success(t('toast.saveSuccess'))
       try {
         window.dispatchEvent(new CustomEvent('appSettingsUpdated', { detail: next }))
       } catch {
         // ignore
       }
     } catch {
-      toast.error('保存设置失败，请稍后重试。')
+      toast.error(t('toast.saveFail'))
     } finally {
       setSaving(false)
     }
   }
 
-  const openDanger = (action: string) => {
+  const openDanger = (action: 'stopAll' | 'removeAll' | 'pruneVolumes' | 'fullCleanup') => {
     setDangerAction(action)
     setDangerOpen(true)
   }
@@ -125,31 +129,31 @@ export function SettingsPage() {
     setDangerLoading(true)
     try {
       let result: { success: boolean; error?: string; exitCode?: number; stderrSnippet?: string } | null = null
-      let successMessage = '操作已完成。'
+      let successMessage = t('debugActions.successFull')
 
-      if (dangerAction === '停止所有容器') {
+      if (dangerAction === 'stopAll') {
         result = await window.api.dockerStopAll()
-        successMessage = '所有容器已停止。'
-      } else if (dangerAction === '删除所有容器') {
+        successMessage = t('debugActions.successStop')
+      } else if (dangerAction === 'removeAll') {
         result = await window.api.dockerRemoveAll()
-        successMessage = '所有容器已删除。'
-      } else if (dangerAction === '清空所有数据卷') {
+        successMessage = t('debugActions.successRemove')
+      } else if (dangerAction === 'pruneVolumes') {
         result = await window.api.dockerPruneVolumes()
-        successMessage = '所有数据卷已清空。'
-      } else if (dangerAction === '一键清理') {
+        successMessage = t('debugActions.successPrune')
+      } else if (dangerAction === 'fullCleanup') {
         result = await window.api.dockerFullCleanup()
-        successMessage = '一键清理已完成。'
+        successMessage = t('debugActions.successFull')
       }
 
       if (!result) {
-        toast.error('未知的调试操作。')
+        toast.error(t('debugActions.unknown'))
       } else if (!result.success) {
-        toast.error(result.error ?? '执行调试操作失败，请检查 Docker 状态。')
+        toast.error(result.error ?? t('debugActions.fail'))
       } else {
         toast.success(successMessage)
       }
     } catch (_err) {
-      toast.error('执行调试操作失败，请检查 Docker 状态。')
+      toast.error(t('debugActions.fail'))
     } finally {
       setDangerLoading(false)
       setDangerOpen(false)
@@ -164,8 +168,8 @@ export function SettingsPage() {
             <Globe2 className="h-3.5 w-3.5" />
           </span>
           <div>
-            <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">设置中心</div>
-            <div className="text-xs font-medium text-slate-800 dark:text-slate-100">系统与模块配置</div>
+            <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">{t('title')}</div>
+            <div className="text-xs font-medium text-slate-800 dark:text-slate-100">{t('subtitle')}</div>
           </div>
         </div>
         <nav className="mt-2 text-xs text-slate-700 dark:text-slate-200">
@@ -190,7 +194,7 @@ export function SettingsPage() {
                 >
                   <tab.icon className="h-3.5 w-3.5" />
                 </span>
-                <span>{tab.label}</span>
+                <span>{t(`tabs.${tab.key}`)}</span>
               </button>
             ))}
           </div>
@@ -253,9 +257,13 @@ export function SettingsPage() {
       <Dialog open={dangerOpen} onOpenChange={setDangerOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>确认执行危险操作？</DialogTitle>
+            <DialogTitle>{t('dangerDialog.title')}</DialogTitle>
             <DialogDescription>
-              {dangerAction ? `你正在尝试执行「${dangerAction}」操作，该操作可能会导致容器或数据被清理，请确认你已经备份重要数据。` : null}
+              {dangerAction
+                ? t('dangerDialog.description', {
+                    action: t(`debugActions.${dangerAction}`),
+                  })
+                : null}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -263,7 +271,7 @@ export function SettingsPage() {
               variant="outline"
               onClick={() => setDangerOpen(false)}
             >
-              取消
+              {t('dangerDialog.cancel')}
             </Button>
             <Button
               variant="destructive"
@@ -271,7 +279,7 @@ export function SettingsPage() {
               disabled={dangerLoading}
               onClick={handleConfirmDanger}
             >
-              {dangerLoading ? '执行中…' : '确认执行'}
+              {dangerLoading ? t('dangerDialog.executing') : t('dangerDialog.confirm')}
             </Button>
           </DialogFooter>
         </DialogContent>

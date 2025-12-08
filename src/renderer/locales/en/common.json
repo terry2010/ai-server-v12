@@ -1,0 +1,38 @@
+{
+  "nav": {
+    "home": "Home",
+    "dashboard": "Dashboard",
+    "settings": "Settings",
+    "logs": "Logs",
+    "monitoring": "Monitoring",
+    "tutorial": "Tutorial",
+    "market": "AI Market",
+    "browserAgent": "AI Browser"
+  },
+  "action": {
+    "open": "Open",
+    "save": "Save",
+    "reset": "Reset to default",
+    "close": "Close",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "back": "Back"
+  },
+  "status": {
+    "running": "Running",
+    "stopped": "Stopped",
+    "starting": "Starting",
+    "stopping": "Stopping",
+    "error": "Error",
+    "unknown": "Unknown"
+  },
+  "theme": {
+    "toggle": "Toggle theme"
+  },
+  "misc": {
+    "productSubtitle": "AI Service Control Center",
+    "menu": "Menu",
+    "sidebarTitle": "Navigation",
+    "sidebarSubtitle": "{{systemName}} Control Center"
+  }
+}

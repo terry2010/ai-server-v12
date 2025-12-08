@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusDot, type ServiceStatus } from '@/components/StatusDot'
 import type { ServiceKey, ServiceModule } from '../Dashboard'
+import { useTranslation } from 'react-i18next'
 
 interface ServiceCardProps {
   service: ServiceModule
@@ -54,6 +55,23 @@ function MetricLine({ icon: Icon, label, value, accent, percent }: MetricLinePro
 }
 
 export function ServiceCard({ service, onToggle, onOpenModule, onViewLogs }: ServiceCardProps) {
+  const { t } = useTranslation(['dashboard', 'common'])
+
+  const statusLabel =
+    service.status === 'running'
+      ? t('common:status.running')
+      : service.status === 'stopped'
+      ? t('common:status.stopped')
+      : service.status === 'starting'
+      ? t('common:status.starting')
+      : service.status === 'stopping'
+      ? t('common:status.stopping')
+      : t('common:status.error')
+
+  const description = t(`dashboard:modules.${service.key}.description`, {
+    defaultValue: service.description,
+  })
+
   return (
     <Card className="relative transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl hover:bg-slate-50/100 dark:hover:bg-slate-800/90">
       <CardHeader>
@@ -65,7 +83,7 @@ export function ServiceCard({ service, onToggle, onOpenModule, onViewLogs }: Ser
               </span>
               <div>
                 <CardTitle>{service.name}</CardTitle>
-                <CardDescription>{service.description}</CardDescription>
+                <CardDescription>{description}</CardDescription>
               </div>
             </div>
           </div>
@@ -89,20 +107,16 @@ export function ServiceCard({ service, onToggle, onOpenModule, onViewLogs }: Ser
                 )}
               </div>
               <span>
-                {service.status === 'running'
-                  ? '运行中'
-                  : service.status === 'stopped'
-                  ? '已停止'
-                  : service.status === 'starting'
-                  ? '启动中'
-                  : service.status === 'stopping'
-                  ? '停止中'
-                  : '异常'}
+                {statusLabel}
               </span>
             </div>
             <div className="flex items-center gap-2 text-[10px] text-slate-400">
-              <span>运行时间 {service.metrics.uptime}</span>
-              <span>端口 {service.metrics.port}</span>
+              <span>
+                {t('dashboard:service.labels.uptime')} {service.metrics.uptime}
+              </span>
+              <span>
+                {t('dashboard:service.labels.port')} {service.metrics.port}
+              </span>
             </div>
           </div>
         </div>
@@ -111,14 +125,14 @@ export function ServiceCard({ service, onToggle, onOpenModule, onViewLogs }: Ser
         <div className="grid gap-3 text-xs text-slate-400 md:grid-cols-2">
           <MetricLine
             icon={Cpu}
-            label="CPU"
+            label={t('dashboard:service.labels.cpu')}
             value={`${service.metrics.cpu}%`}
             percent={service.metrics.cpu}
             accent="from-sky-400 to-emerald-400"
           />
           <MetricLine
             icon={MemoryStick}
-            label="内存"
+            label={t('dashboard:service.labels.memory')}
             value={`${service.metrics.memory}%`}
             percent={service.metrics.memory}
             accent="from-violet-400 to-sky-400"
@@ -149,22 +163,22 @@ export function ServiceCard({ service, onToggle, onOpenModule, onViewLogs }: Ser
               {service.status === 'running' ? (
                 <>
                   <Square className="mr-1 h-3 w-3" />
-                  停止
+                  {t('dashboard:service.buttons.stop')}
                 </>
               ) : service.status === 'starting' ? (
                 <>
                   <Activity className="mr-1 h-3 w-3 animate-spin" />
-                  启动中
+                  {t('dashboard:service.buttons.starting')}
                 </>
               ) : service.status === 'stopping' ? (
                 <>
                   <Activity className="mr-1 h-3 w-3 animate-spin" />
-                  停止中
+                  {t('dashboard:service.buttons.stopping')}
                 </>
               ) : (
                 <>
                   <Play className="mr-1 h-3 w-3" />
-                  启动
+                  {t('dashboard:service.buttons.start')}
                 </>
               )}
             </Button>
@@ -175,7 +189,7 @@ export function ServiceCard({ service, onToggle, onOpenModule, onViewLogs }: Ser
               onClick={() => onViewLogs(service.key)}
             >
               <FileText className="mr-1 h-3 w-3" />
-              查看日志
+              {t('dashboard:service.buttons.viewLogs')}
             </Button>
           </div>
           <Button
@@ -186,7 +200,7 @@ export function ServiceCard({ service, onToggle, onOpenModule, onViewLogs }: Ser
             onClick={() => onOpenModule(service.key)}
           >
             <ExternalLink className="mr-1 h-3 w-3" />
-            打开
+            {t('common:action.open')}
           </Button>
         </div>
       </CardContent>

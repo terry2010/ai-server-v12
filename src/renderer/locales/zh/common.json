@@ -1,0 +1,38 @@
+{
+  "nav": {
+    "home": "首页",
+    "dashboard": "仪表盘",
+    "settings": "设置",
+    "logs": "日志",
+    "monitoring": "监控",
+    "tutorial": "教程",
+    "market": "AI 市场",
+    "browserAgent": "AI 浏览器"
+  },
+  "action": {
+    "open": "打开",
+    "save": "保存",
+    "reset": "重置为默认",
+    "close": "关闭",
+    "cancel": "取消",
+    "confirm": "确认",
+    "back": "返回"
+  },
+  "status": {
+    "running": "运行中",
+    "stopped": "已停止",
+    "starting": "启动中",
+    "stopping": "停止中",
+    "error": "异常",
+    "unknown": "未知"
+  },
+  "theme": {
+    "toggle": "切换主题"
+  },
+  "misc": {
+    "productSubtitle": "AI 服务管理平台",
+    "menu": "菜单",
+    "sidebarTitle": "导航",
+    "sidebarSubtitle": "{{systemName}} 控制中心"
+  }
+}

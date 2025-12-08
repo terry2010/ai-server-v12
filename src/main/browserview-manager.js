@@ -1,4 +1,4 @@
-import { BrowserView } from 'electron'
+import { WebContentsView } from 'electron'
 import { defaultAppSettings, getAppSettings, isVerboseLoggingEnabled } from './app-settings.js'
 import { detectDockerStatus, getDockerClient } from './docker-client.js'
 import { moduleDockerConfig } from './config.js'
@@ -121,11 +121,10 @@ async function runBrowserViewGcOnce() {
     if (running) continue
 
     try {
-      if (mainWindow) {
-        const views = mainWindow.getBrowserViews()
-        if (Array.isArray(views) && views.includes(entry.view)) {
-          mainWindow.removeBrowserView(entry.view)
-        }
+      if (mainWindow && mainWindow.contentView) {
+        try {
+          mainWindow.contentView.removeChildView(entry.view)
+        } catch {}
       }
     } catch {}
 
@@ -138,7 +137,11 @@ async function runBrowserViewGcOnce() {
     } catch {}
 
     try {
-      entry.view.destroy()
+      if (entry.view && entry.view.webContents && typeof entry.view.webContents.destroy === 'function') {
+        try {
+          entry.view.webContents.destroy()
+        } catch {}
+      }
     } catch {}
 
     delete moduleViews[moduleId]
@@ -176,9 +179,10 @@ function detachCurrentView() {
   const entry = moduleViews[currentModuleId]
   if (!entry || !entry.view) return
   try {
-    const views = mainWindow.getBrowserViews()
-    if (Array.isArray(views) && views.includes(entry.view)) {
-      mainWindow.removeBrowserView(entry.view)
+    if (mainWindow.contentView) {
+      try {
+        mainWindow.contentView.removeChildView(entry.view)
+      } catch {}
     }
   } catch {}
 }
@@ -212,7 +216,7 @@ export async function openModuleBrowserView(rawModuleId) {
   }
 
   if (!entry) {
-    const view = new BrowserView({ webPreferences: { nodeIntegration: false, contextIsolation: true } })
+    const view = new WebContentsView({ webPreferences: { nodeIntegration: false, contextIsolation: true } })
     entry = { moduleId, view, lastActiveAt: Date.now(), contextMenuDispose: null }
     moduleViews[moduleId] = entry
     setupViewEvents(entry, homeUrl)
@@ -232,9 +236,9 @@ export async function openModuleBrowserView(rawModuleId) {
             const settings = getAppSettings() || defaultAppSettings
             const rawName = settings && typeof settings.systemName === 'string' ? settings.systemName : ''
             const name = rawName && rawName.trim() ? rawName.trim() : 'AI-Server'
-            return `返回${name}首页`
+            return name
           } catch {
-            return '返回AI-Server首页'
+            return 'AI-Server'
           }
         },
         onBackToModules: () => {
@@ -263,10 +267,17 @@ export async function openModuleBrowserView(rawModuleId) {
   detachCurrentView()
 
   try {
-    mainWindow.addBrowserView(entry.view)
+    if (!mainWindow.contentView) {
+      return { success: false, error: '主窗口视图树尚未就绪，无法附加模块页面。' }
+    }
+    try {
+      mainWindow.contentView.addChildView(entry.view)
+    } catch {}
     const bounds = getBrowserViewBounds()
     if (bounds) {
-      entry.view.setBounds(bounds)
+      try {
+        entry.view.setBounds(bounds)
+      } catch {}
     }
   } catch (error) {
     const message = error && error.message ? String(error.message) : String(error || '')

@@ -1,4 +1,65 @@
-import { BrowserWindow, Menu } from 'electron'
+import { app, BrowserWindow, Menu } from 'electron'
+import { defaultAppSettings, getAppSettings } from './app-settings.js'
+
+/**
+ * @typedef {'zh' | 'en'} UiLanguage
+ */
+
+/** @type {{ [K in UiLanguage]: { backToModules: string; undo: string; redo: string; cut: string; copy: string; paste: string; selectAll: string; forward: string; back: string; reload: string; print: string } }} */
+const MENU_LABELS = {
+  zh: {
+    backToModules: '返回模块列表',
+    undo: '撤销',
+    redo: '重做',
+    cut: '剪切',
+    copy: '复制',
+    paste: '粘贴',
+    selectAll: '全选',
+    forward: '前进',
+    back: '后退',
+    reload: '刷新',
+    print: '打印',
+  },
+  en: {
+    backToModules: 'Back to modules',
+    undo: 'Undo',
+    redo: 'Redo',
+    cut: 'Cut',
+    copy: 'Copy',
+    paste: 'Paste',
+    selectAll: 'Select all',
+    forward: 'Forward',
+    back: 'Back',
+    reload: 'Reload',
+    print: 'Print',
+  },
+}
+
+/**
+ * 根据系统 locale 推断默认语言（仅区分中/英）。
+ * @returns {UiLanguage}
+ */
+function resolveSystemLanguageForMenu() {
+  try {
+    const locale = (app.getLocale && app.getLocale()) || ''
+    const lower = String(locale).toLowerCase()
+    if (lower.startsWith('zh')) return 'zh'
+  } catch {}
+  return 'en'
+}
+
+/**
+ * 依据 AppSettings.language（auto/zh/en）和系统语言，确定当前 UI 语言。
+ * @returns {UiLanguage}
+ */
+function getCurrentMenuLanguage() {
+  try {
+    const settings = (typeof getAppSettings === 'function' && getAppSettings()) || defaultAppSettings
+    const lang = settings && settings.language
+    if (lang === 'zh' || lang === 'en') return lang
+  } catch {}
+  return resolveSystemLanguageForMenu()
+}
 
 /**
  * 为 BrowserView / WebContents 附加通用右键菜单。
@@ -28,17 +89,21 @@ export function attachBrowserViewContextMenu(options) {
       const hasSelection = selectionText.trim().length > 0
       const editFlags = params.editFlags || {}
 
+      const lang = getCurrentMenuLanguage()
+      const labels = MENU_LABELS[lang] || MENU_LABELS.en
+
       /** @type {import('electron').MenuItemConstructorOptions[]} */
       const template = []
 
       // 通用：返回首页（可根据系统名称自定义文案）
       if (onBackToModules) {
-        let backLabel = '返回模块列表'
+        let backLabel = labels.backToModules
         try {
           if (getBackLabel) {
             const custom = getBackLabel()
             if (typeof custom === 'string' && custom.trim()) {
-              backLabel = custom.trim()
+              const name = custom.trim()
+              backLabel = lang === 'zh' ? `返回${name}首页` : `Back to ${name} home`
             }
           }
         } catch {}
@@ -58,7 +123,7 @@ export function attachBrowserViewContextMenu(options) {
         // 输入框场景（包括 textarea / input / contentEditable）
         template.push(
           {
-            label: '撤销',
+            label: labels.undo,
             enabled: !!editFlags.canUndo,
             click: () => {
               try {
@@ -67,7 +132,7 @@ export function attachBrowserViewContextMenu(options) {
             },
           },
           {
-            label: '重做',
+            label: labels.redo,
             enabled: !!editFlags.canRedo,
             click: () => {
               try {
@@ -77,7 +142,7 @@ export function attachBrowserViewContextMenu(options) {
           },
           { type: 'separator' },
           {
-            label: '剪切',
+            label: labels.cut,
             enabled: !!editFlags.canCut,
             click: () => {
               try {
@@ -86,7 +151,7 @@ export function attachBrowserViewContextMenu(options) {
             },
           },
           {
-            label: '复制',
+            label: labels.copy,
             enabled: !!editFlags.canCopy,
             click: () => {
               try {
@@ -95,7 +160,7 @@ export function attachBrowserViewContextMenu(options) {
             },
           },
           {
-            label: '粘贴',
+            label: labels.paste,
             enabled: !!editFlags.canPaste,
             click: () => {
               try {
@@ -104,7 +169,7 @@ export function attachBrowserViewContextMenu(options) {
             },
           },
           {
-            label: '全选',
+            label: labels.selectAll,
             enabled: !!editFlags.canSelectAll,
             click: () => {
               try {
@@ -116,7 +181,7 @@ export function attachBrowserViewContextMenu(options) {
       } else if (hasSelection) {
         // 普通页面文字被选中时：只提供复制
         template.push({
-          label: '复制',
+          label: labels.copy,
           click: () => {
             try {
               wc.copy()
@@ -127,7 +192,7 @@ export function attachBrowserViewContextMenu(options) {
         // 普通页面无选中：导航 + 全选 / 打印
         template.push(
           {
-            label: '前进',
+            label: labels.forward,
             enabled: wc.canGoForward(),
             click: () => {
               try {
@@ -136,7 +201,7 @@ export function attachBrowserViewContextMenu(options) {
             },
           },
           {
-            label: '后退',
+            label: labels.back,
             enabled: wc.canGoBack(),
             click: () => {
               try {
@@ -145,7 +210,7 @@ export function attachBrowserViewContextMenu(options) {
             },
           },
           {
-            label: '刷新',
+            label: labels.reload,
             click: () => {
               try {
                 wc.reload()
@@ -154,7 +219,7 @@ export function attachBrowserViewContextMenu(options) {
           },
           { type: 'separator' },
           {
-            label: '全选',
+            label: labels.selectAll,
             click: () => {
               try {
                 wc.selectAll()
@@ -162,7 +227,7 @@ export function attachBrowserViewContextMenu(options) {
             },
           },
           {
-            label: '打印',
+            label: labels.print,
             click: () => {
               try {
                 wc.print({})

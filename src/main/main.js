@@ -51,9 +51,9 @@ async function createWindow() {
           const settings = getAppSettings() || defaultAppSettings
           const rawName = settings && typeof settings.systemName === 'string' ? settings.systemName : ''
           const name = rawName && rawName.trim() ? rawName.trim() : 'AI-Server'
-          return `返回${name}首页`
+          return name
         } catch {
-          return '返回AI-Server首页'
+          return 'AI-Server'
         }
       },
       onBackToModules: () => {

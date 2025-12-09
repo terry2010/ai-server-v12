@@ -898,6 +898,7 @@ export function AppLayout() {
                     <SideNavItem icon={BookOpenText} label={t('nav.tutorial')} to="/tutorial" />
                     <SideNavItem icon={Store} label={t('nav.market')} to="/market" />
                     <SideNavItem icon={Settings2} label={t('nav.settings')} to="/settings" />
+                    <SideNavItem icon={Activity} label={t('nav.account')} to="/account" />
                     <SideNavItem icon={TerminalSquare} label={t('nav.logs')} to="/logs" />
                     <SideNavItem icon={Activity} label={t('nav.monitoring')} to="/monitoring" />
                   </div>
@@ -915,6 +916,7 @@ export function AppLayout() {
                     <SideNavItem icon={BookOpenText} label={t('nav.tutorial')} to="/tutorial" onClick={() => setMobileOpen(false)} />
                     <SideNavItem icon={Store} label={t('nav.market')} to="/market" onClick={() => setMobileOpen(false)} />
                     <SideNavItem icon={Settings2} label={t('nav.settings')} to="/settings" onClick={() => setMobileOpen(false)} />
+                    <SideNavItem icon={Activity} label={t('nav.account')} to="/account" onClick={() => setMobileOpen(false)} />
                     <SideNavItem icon={TerminalSquare} label={t('nav.logs')} to="/logs" onClick={() => setMobileOpen(false)} />
                     <SideNavItem icon={Activity} label={t('nav.monitoring')} to="/monitoring" onClick={() => setMobileOpen(false)} />
                   </div>

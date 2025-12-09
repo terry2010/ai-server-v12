@@ -82,6 +82,10 @@ const MINIO_IMAGE = 'quay.io/minio/minio:RELEASE.2025-06-13T11-33-47Z'
 const MINIO_CONTAINER_NAME = 'ai-server-minio'
 const MINIO_DATA_VOLUME_NAME = 'ai-server-minio-data'
 
+// 正式环境下嵌入站点的基础 URL（生产构建时写死为官方域名）。
+// 开发环境中可通过 AI_SERVER_SITE_BASE 覆盖。
+const OFFICIAL_SITE_BASE_URL = 'https://www.zhuikan.com'
+
 export {
   modules,
   moduleDockerConfig,
@@ -105,4 +109,5 @@ export {
   MINIO_IMAGE,
   MINIO_CONTAINER_NAME,
   MINIO_DATA_VOLUME_NAME,
+  OFFICIAL_SITE_BASE_URL,
 }

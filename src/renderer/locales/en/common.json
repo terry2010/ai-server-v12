@@ -2,11 +2,12 @@
   "nav": {
     "home": "Home",
     "dashboard": "Dashboard",
+    "tutorial": "Tutorials",
+    "market": "AI Market",
+    "account": "Account",
     "settings": "Settings",
     "logs": "Logs",
     "monitoring": "Monitoring",
-    "tutorial": "Tutorial",
-    "market": "AI Market",
     "browserAgent": "AI Browser"
   },
   "action": {

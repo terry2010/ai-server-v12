@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setupIpcHandlers } from './ipc-handlers.js'
 import { setBrowserViewMainWindow } from './browserview-manager.js'
+import { setSiteViewMainWindow } from './siteview-manager.js'
 import { attachBrowserViewContextMenu } from './browserview-context-menu.js'
 import { defaultAppSettings, getAppSettings, initAppSettingsFromDisk } from './app-settings.js'
 import { startBrowserAgentServer, stopBrowserAgentServer } from './browser-agent-server.js'
@@ -67,6 +68,7 @@ async function createWindow() {
   } catch {}
 
   setBrowserViewMainWindow(mainWindow)
+  setSiteViewMainWindow(mainWindow)
 
   if (isDev) {
     await mainWindow.loadURL('http://localhost:5174')

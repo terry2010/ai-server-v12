@@ -2,11 +2,12 @@
   "nav": {
     "home": "首页",
     "dashboard": "仪表盘",
-    "settings": "设置",
-    "logs": "日志",
-    "monitoring": "监控",
-    "tutorial": "教程",
+    "tutorial": "在线教程",
     "market": "AI 市场",
+    "account": "用户中心",
+    "settings": "系统设置",
+    "logs": "运行日志",
+    "monitoring": "运行监控",
     "browserAgent": "AI 浏览器"
   },
   "action": {

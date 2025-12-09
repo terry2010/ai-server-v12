@@ -94,4 +94,21 @@ export interface WindowApi {
     success: boolean
     error?: string
   }>
+  openSiteView(
+    pageId: 'tutorial' | 'market' | 'account',
+    theme?: 'light' | 'dark',
+  ): Promise<{
+    success: boolean
+    error?: string
+  }>
+  closeSiteView(): Promise<{
+    success: boolean
+    error?: string
+  }>
+  controlSiteView(
+    action: 'home' | 'reload' | 'back' | 'forward' | 'set-theme-dark' | 'set-theme-light',
+  ): Promise<{
+    success: boolean
+    error?: string
+  }>
 }

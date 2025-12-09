@@ -42,6 +42,7 @@ import {
   closeBrowserView,
   controlModuleBrowserView,
 } from './browserview-manager.js'
+import { openSiteView, closeSiteView, controlSiteView } from './siteview-manager.js'
 import { readNdjson, getBrowserAgentDataRootDir } from './browser-agent-storage.js'
 import {
   getSession as getBrowserAgentSession,
@@ -2413,6 +2414,21 @@ export function setupIpcHandlers() {
     const moduleId = payload && typeof payload.moduleId === 'string' ? payload.moduleId : undefined
     const action = payload && typeof payload.action === 'string' ? payload.action : undefined
     return controlModuleBrowserView(moduleId, action)
+  })
+
+  ipcMain.handle('siteView:open', async (_event, payload) => {
+    const pageId = payload && typeof payload.pageId === 'string' ? payload.pageId : undefined
+    const theme = payload && typeof payload.theme === 'string' ? payload.theme : undefined
+    return openSiteView(pageId, theme)
+  })
+
+  ipcMain.handle('siteView:close', async () => {
+    return closeSiteView()
+  })
+
+  ipcMain.handle('siteView:control', async (_event, payload) => {
+    const action = payload && typeof payload.action === 'string' ? payload.action : undefined
+    return controlSiteView(action)
   })
 
   // Monitoring

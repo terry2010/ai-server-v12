@@ -8,6 +8,7 @@ import { LogsPage } from '@/pages/Logs'
 import { MonitoringPage } from '@/pages/Monitoring'
 import { TutorialPage } from '@/pages/Tutorial'
 import { MarketPage } from '@/pages/Market'
+import { AccountPage } from '@/pages/Account'
 import { N8nModulePage } from '@/pages/ModuleN8n'
 import { DifyModulePage } from '@/pages/ModuleDify'
 import { OneApiModulePage } from '@/pages/ModuleOneApi'
@@ -25,6 +26,7 @@ function App() {
           <Route path="monitoring" element={<MonitoringPage />} />
           <Route path="tutorial" element={<TutorialPage />} />
           <Route path="market" element={<MarketPage />} />
+          <Route path="account" element={<AccountPage />} />
           <Route path="n8n" element={<N8nModulePage />} />
           <Route path="dify" element={<DifyModulePage />} />
           <Route path="oneapi" element={<OneApiModulePage />} />

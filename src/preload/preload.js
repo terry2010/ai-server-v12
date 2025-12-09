@@ -115,6 +115,16 @@ const api = {
     ipcRenderer.invoke('modules:restoreData', {
       moduleId,
     }),
+  openSiteView: (pageId, theme) =>
+    ipcRenderer.invoke('siteView:open', {
+      pageId,
+      theme,
+    }),
+  closeSiteView: () => ipcRenderer.invoke('siteView:close', {}),
+  controlSiteView: (action) =>
+    ipcRenderer.invoke('siteView:control', {
+      action,
+    }),
 }
 
 ipcRenderer.on('browserView:backToModules', () => {
